@@ -156,7 +156,7 @@ bool Towing::Iterate()
   // Publish towed body for visualization
   string body_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
                     doubleToStringX(m_towed_y,1) + ",label=TOW_BODY";
-  body_str += ",type=diamond,color=red";
+  body_str += ",type=diamond,color=red"; //look into resizing and if there are actually shapes
   body_str += ",heading=" + doubleToStringX(m_nav_heading,1);
   Notify("VIEW_POINT", body_str);
 
