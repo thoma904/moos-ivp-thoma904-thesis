@@ -64,7 +64,7 @@ ProcessConfig = pHelmIvP
   AppTick    = 4
   CommsTick  = 4
 
-  Behaviors  = alder.bhv
+  Behaviors  = towing_1.bhv
   Verbose    = quiet
   Domain     = course:0:359:360
   Domain     = speed:0:4:21
@@ -158,4 +158,6 @@ ProcessConfig = pTowing
 {
   AppTick	  = 2
   CommsTick	= 2
+
+  cable_length = 30
 }

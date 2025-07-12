@@ -13,6 +13,7 @@ ADD_EXECUTABLE(pTowing ${SRC})
 
 TARGET_LINK_LIBRARIES(pTowing
    ${MOOS_LIBRARIES}
+   geometry
    apputil
    mbutil
    m
