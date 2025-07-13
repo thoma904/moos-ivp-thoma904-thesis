@@ -32,13 +32,26 @@ find_package(MOOS 10.0)
 INCLUDE_DIRECTORIES(${MOOS_INCLUDE_DIRS})
 
 #=======================================================================
+# FINDING MOOSGeodesy' HEADERS AND LIBRARIES... 
+#=======================================================================
+find_package(MOOSGeodesy)
+include_directories(${MOOSGeodesy_INCLUDE_DIRS})
+link_directories(${MOOSGeodesy_LIBRARY_PATH})
+
+message("+++++++++++++++++++++++++++++++++++++++++")
+message("MOOSGeodesy_INCLUDE_DIRS:" ${MOOSGeodesy_INCLUDE_DIRS})
+message("MOOSGeodesy_LIBRARY_PATH:" ${MOOSGeodesy_LIBRARY_PATH})
+message("+++++++++++++++++++++++++++++++++++++++++")
+
+
+#=======================================================================
 # Find the "moos-ivp" base directory
 #=======================================================================
 
 # Search for the moos-ivp folder
 find_path( MOOSIVP_SOURCE_TREE_BASE
            NAMES build-ivp.sh build-moos.sh configure-ivp.sh
-           PATHS "../moos-ivp" "../../moos-ivp" "../../moos-ivp/trunk/" "../moos-ivp/trunk/"
+           PATHS "../moos-ivp" "../../moos-ivp"
            DOC "Base directory of the MOOS-IvP source tree"
            NO_DEFAULT_PATH
 )
@@ -58,6 +71,27 @@ INCLUDE_DIRECTORIES(${IVP_INCLUDE_DIRS})
 
 FILE(GLOB IVP_LIBRARY_DIRS ${MOOSIVP_SOURCE_TREE_BASE}/lib )
 LINK_DIRECTORIES(${IVP_LIBRARY_DIRS})
+
+
+#=============================================================================
+# Tell CMake (and thus C++) where to find IvP's header files...
+#=============================================================================
+
+IF( EXISTS /usr/local/include AND EXISTS /usr/local/lib )
+  INCLUDE_DIRECTORIES(/usr/local/include)
+  LINK_DIRECTORIES(/usr/local/lib)
+ENDIF()
+
+IF( EXISTS /opt/local/include AND EXISTS /opt/local/lib )
+  INCLUDE_DIRECTORIES(/opt/local/include)
+  LINK_DIRECTORIES(/opt/local/lib)
+ENDIF()
+
+IF( EXISTS /opt/homebrew/include AND EXISTS /opt/homebrew/lib )
+  INCLUDE_DIRECTORIES(/opt/homebrew/include)
+  LINK_DIRECTORIES(/opt/homebrew/lib)
+ENDIF()
+
 
 #======================================================================
 # Specify Compiler Flags
