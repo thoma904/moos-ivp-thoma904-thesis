@@ -21,6 +21,7 @@ ProcessConfig = ANTLER
   Run = uProcessWatch @ NewConsole = false
   Run = pHelmIvP      @ NewConsole = false
   Run = pTowing     @ NewConsole = false
+  Run = pLogger       @ NewConsole = false
 }
 
 //------------------------------------------
@@ -156,8 +157,30 @@ ProcessConfig = pNodeReporter
 
 ProcessConfig = pTowing
 {
-  AppTick	  = 4
-  CommsTick	= 4
+  AppTick	  = 20
+  CommsTick	= 20
 
   cable_length = 30
+}
+
+ProcessConfig = pLogger
+{
+  AppTick   = 20
+  CommsTick = 20
+
+  AsyncLog = true
+
+  // For variables that are published in a bundle on their 
+  // first post, explicitly declare their logging request
+  Log = IVPHELM_LIFE_EVENT @ 0 NOSYNC
+  Log = REPORT @ 0 NOSYNC
+  Log = BHV_SETTINGS @ 0 NOSYNC
+  Log = SUMMARY @ 0 NOSYNC
+
+  LogAuxSrc = true
+  WildCardLogging = true
+  WildCardOmitPattern = *_STATUS
+  WildCardOmitPattern = DB_VARSUMMARY
+  WildCardOmitPattern = DB_RWSUMMARY
+  WildCardExclusionLog = false
 }
