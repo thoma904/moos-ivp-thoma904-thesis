@@ -72,6 +72,17 @@ INCLUDE_DIRECTORIES(${IVP_INCLUDE_DIRS})
 FILE(GLOB IVP_LIBRARY_DIRS ${MOOSIVP_SOURCE_TREE_BASE}/lib )
 LINK_DIRECTORIES(${IVP_LIBRARY_DIRS})
 
+#======================================================================
+# Specify where to find Eigen3 headers...
+#======================================================================
+set(EIGEN3_INCLUDE_DIR
+    "${MOOSIVP_SOURCE_TREE_BASE}/extra_libraries/eigen" CACHE PATH "")
+
+if (NOT EXISTS "${EIGEN3_INCLUDE_DIR}/Eigen/Dense")
+    message(FATAL_ERROR "Eigen headers not found in ${EIGEN3_INCLUDE_DIR}")
+endif()
+
+include_directories(${EIGEN3_INCLUDE_DIR})
 
 #=============================================================================
 # Tell CMake (and thus C++) where to find IvP's header files...

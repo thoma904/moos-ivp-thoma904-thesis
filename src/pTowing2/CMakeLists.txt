@@ -18,4 +18,3 @@ TARGET_LINK_LIBRARIES(pTowing
    mbutil
    m
    pthread)
-
