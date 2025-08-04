@@ -46,6 +46,8 @@ class Towing : public AppCastingMOOSApp
  double m_prev_heading;
  double m_nav_speed;
  double m_prev_time;
+ double m_cable_tension; 
+ double m_cable_angle; 
 };
 
 #endif 

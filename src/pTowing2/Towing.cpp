@@ -32,6 +32,8 @@ Towing::Towing()
   m_prev_heading = 0;
   m_nav_speed = 0;
   m_prev_time = MOOSTime();
+  m_cable_tension = 0;
+  m_cable_angle = 0; // Initialize cable angle
 }
 
 //---------------------------------------------------------
@@ -104,6 +106,7 @@ bool Towing::Iterate()
     return true;
 
   //ODE's
+  // F_3 = Tension*sin(cable_angle)
   // F_3 = U_1 * m_t * U_3 - U_1 * (x_T * m_T + m) * Omega_2 + (m^s_33 + m)*Udot_3 + (m^s_35 +M_35)*Omegadot_2
   // -F_3*x_T = -U_1*(m^s_33 + x_T*m_T)*U_3 -U_1*(m^s_35 + M_35 - x_T*x_T*m_T)*Omega_2 + (m^s_35 + M_35)*Udot_3 + (m^s_55 + M_55)*Omegadot_2;
   // Right Hand Side 1:
@@ -175,6 +178,7 @@ void Towing::registerVariables()
   Register("NAV_Y", 0);
   Register("NAV_HEADING", 0);
   Register("NAV_SPEED", 0);
+  Register("CABLE_TENSION", 0);
 }
 
 
