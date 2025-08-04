@@ -34,6 +34,25 @@ Towing::Towing()
   m_prev_time = MOOSTime();
   m_cable_tension = 0;
   m_cable_angle = 0; // Initialize cable angle
+
+  m      =  85.0;     // dry mass of towed body  [kg]
+  mT     =   0.0;     // entrained (cable‑end) mass [kg]
+  xT     =   0.0;     // longitudinal offset of tow‑point [m]
+
+  ms33   = 120.0;     // added‑mass terms from Newman
+  ms35   =   0.0;
+  ms55   =  15.0;
+  M35    =   0.0;
+  M55    =   0.0;
+
+  /* states propagated each Iterate() */
+  U1        = 0.0;   // surge of towing vehicle (input)  [m/s]
+  U3        = 0.0;   // sway/heave component of towed body [m/s]
+  Omega2    = 0.0;   // pitch‑rate (body‑axis 2)          [rad/s]
+
+  m_towed_x = 0.0;   // output position in world frame
+  m_towed_y = 0.0;
+  tow_heading = 0.0; // deg, world frame yaw (uses Ω2)
 }
 
 //---------------------------------------------------------
@@ -136,34 +155,75 @@ bool Towing::Iterate()
   // M = [m^s_33 + m, 0; 0, m^s_55 + M_55]
 
 
-  // -----------------------
-  // Publish position and visuals
-  // -----------------------
-  string tb_pos_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
-                      doubleToStringX(m_towed_y,1);
-  Notify("TOWING_POSITION", tb_pos_str);
+    U1 = m_nav_speed;                               // surge of tug
+    const double F3 = m_cable_tension * sin(m_cable_angle);  // rudder‑like force
 
-  string tb_hdg_str = "heading=" + doubleToStringX(tow_heading,1);
-  Notify("TOWING_HEADING", tb_hdg_str);
+    //------------------------------------------------------------------
+    // 2.  Right‑hand sides (Newman eq. 60‑61, your notation)
+    //------------------------------------------------------------------
+    const double R1 = -F3
+                      + U1 * mT * U3
+                      - U1 * (xT * mT + m) * Omega2;
 
-  // VIEW_POINT for MarineViewer
-  string body_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
-                    doubleToStringX(m_towed_y,1) + ",label=TOW_BODY";
-  body_str += ",type=diamond,color=red";
-  body_str += ",heading=" + doubleToStringX(tow_heading,1);
-  Notify("VIEW_POINT", body_str);
+    const double R2 =  F3 * xT
+                      + U1 * (ms33 + xT * mT) * U3
+                      - U1 * (ms35 + M35 - xT*xT*mT) * Omega2;
 
-  // VIEW_SEGLIST for cable
-  string cable_str = "pts={" + doubleToStringX(m_nav_x,1) + "," +
-                              doubleToStringX(m_nav_y,1) + ":" +
-                              doubleToStringX(m_towed_x,1) + "," +
-                              doubleToStringX(m_towed_y,1) + "}";
-  cable_str += ",label=TOW_LINE";
-  cable_str += ",edge_color=gray,edge_size=2,vertex_size=0";
-  Notify("VIEW_SEGLIST", cable_str);
+    //------------------------------------------------------------------
+    // 3.  Solve diagonal mass matrix  M · (‑V̇) = R   →  V̇
+    //------------------------------------------------------------------
+    const double denom_U3   =  ms33 + m;
+    const double denom_O2   =  ms55 + M55;
 
-  AppCastingMOOSApp::PostReport();
-  return(true);
+    const double Udot3      = (-R1) / denom_U3;
+    const double Omegadot2  = (-R2) / denom_O2;
+
+    //------------------------------------------------------------------
+    // 4.  Integrate states (Euler‑1st‑order; dt is already small)
+    //------------------------------------------------------------------
+    U3       += Udot3     * dt;
+    Omega2   += Omegadot2 * dt;
+
+    //------------------------------------------------------------------
+    // 5.  Kinematics to world frame (flat‑plane model)
+    //------------------------------------------------------------------
+    double hdg_rad = deg2rad(tow_heading);
+    double world_u =  U1 * cos(hdg_rad) - U3 * sin(hdg_rad); // ẋ world
+    double world_v =  U1 * sin(hdg_rad) + U3 * cos(hdg_rad); // ẏ world
+
+    m_towed_x += world_u * dt;
+    m_towed_y += world_v * dt;
+
+    tow_heading += rad2deg(Omega2 * dt);
+    if(tow_heading <   0) tow_heading += 360.0;
+    if(tow_heading >= 360) tow_heading -= 360.0;
+
+    //------------------------------------------------------------------
+    // 6.  Visual / MOOS postings (unchanged from your stub)
+    //------------------------------------------------------------------
+    string tb_pos_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
+                        doubleToStringX(m_towed_y,1);
+    Notify("TOWING_POSITION", tb_pos_str);
+
+    string tb_hdg_str = "heading=" + doubleToStringX(tow_heading,1);
+    Notify("TOWING_HEADING", tb_hdg_str);
+
+    string body_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
+                      doubleToStringX(m_towed_y,1) + ",label=TOW_BODY";
+    body_str += ",type=diamond,color=red";
+    body_str += ",heading=" + doubleToStringX(tow_heading,1);
+    Notify("VIEW_POINT", body_str);
+
+    string cable_str = "pts={" + doubleToStringX(m_nav_x,1) + "," +
+                                doubleToStringX(m_nav_y,1) + ":" +
+                                doubleToStringX(m_towed_x,1) + "," +
+                                doubleToStringX(m_towed_y,1) + "}";
+    cable_str += ",label=TOW_LINE";
+    cable_str += ",edge_color=gray,edge_size=2,vertex_size=0";
+    Notify("VIEW_SEGLIST", cable_str);
+
+    AppCastingMOOSApp::PostReport();
+    return true;
 }
 
 //---------------------------------------------------------
@@ -247,4 +307,5 @@ std::string Towing::join(const vector<string> &vec, const string &delim) {
   return result;
 }
 
-
+static inline double deg2rad(double d){return d*M_PI/180.0;}
+static inline double rad2deg(double r){return r*180.0/M_PI;}
