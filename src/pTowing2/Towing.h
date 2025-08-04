@@ -63,8 +63,6 @@ class Towing : public AppCastingMOOSApp
  double U3;   // sway/heave component of towed body [m/s]
  double Omega2;   // pitch‑rate (body‑axis 2)          [rad/s]
 
- double m_towed_x;   // output position in world frame
- double m_towed_y;
  double tow_heading; // deg, world frame yaw (uses Ω2)
 };
 
