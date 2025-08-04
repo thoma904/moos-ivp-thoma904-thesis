@@ -105,11 +105,11 @@ bool Towing::Iterate()
 
   //ODE's
   // F_3 = U_1 * m_t * U_3 - U_1 * (x_T * m_T + m) * Omega_2 + (m^s_33 + m)*Udot_3 + (m^s_35 +M_35)*Omegadot_2
-  // -F_3*x_B = U_1 * (m^s_33 + x_T * m_T) * U_3 - U_1 * [m^s_35 + M_35 - (x_T)^2 * m_T] * Omega_2 + (m^s_35 + M_35) * Udot_3 + (m^s_55 + M_55) * Omegadot_2
+  // -F_3*x_T = -U_1*(m^s_33 + x_T*m_T)*U_3 -U_1*(m^s_35 + M_35 - x_T*x_T*m_T)*Omega_2 + (m^s_35 + M_35)*Udot_3 + (m^s_55 + M_55)*Omegadot_2;
   // Right Hand Side 1:
   // R1 = -F_3 + U_1 * m_T * U_3 - U_1 * (x_T * m_T + m) * Omega_2
   // Right Hand Side 2:
-  // R2 = F_3 * x_B + U_1 * (m^s_33 + x_T * m_T) * U_3 - U_1 * [m^s_35 + M_35 - (x_T)^2 * m_T] * Omega_2
+  // R2 = F_3 * x_T + U_1 * (m^s_33 + x_T * m_T) * U_3 - U_1 * [m^s_35 + M_35 - (x_T)^2 * m_T] * Omega_2
   // Left Hand Side 1:
   // L1 = -(m^s_33 + m) * Udot_3 - (m^s_35 + M_35) * Omegadot_2
   // Left Hand Side 2:
