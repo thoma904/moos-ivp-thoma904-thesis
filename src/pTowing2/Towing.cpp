@@ -11,7 +11,7 @@
 #include "ACTable.h"
 #include "Towing.h"
 #include <AngleUtils.h>
-#include <Eigen/Dense>
+//#include <Eigen/Dense>
 
 using namespace std;
 
@@ -134,7 +134,34 @@ bool Towing::Iterate()
   // R = [R1; R2]
   // Simplified M Matrix with Newman U3 and Omega2 initially 0 assumption:
   // M = [m^s_33 + m, 0; 0, m^s_55 + M_55]
+// On first position update, store starting point
+  if(m_towing_position.size() == 0) {
+    m_start_x = m_nav_x;
+    m_start_y = m_nav_y;
+    m_towed_x = m_nav_x;  // initialize towed body here too
+    m_towed_y = m_nav_y;
+  }
 
+  // 1. Store vessel position
+  m_towing_position.add_vertex(m_nav_x, m_nav_y);
+
+  // 2. Trim history to prevent memory bloat
+  if(m_towing_position.size() > 500)
+    m_towing_position.delete_vertex(0);
+
+  // 3. Compute distance from start
+  double dx0 = m_nav_x - m_start_x;
+  double dy0 = m_nav_y - m_start_y;
+  double dist_from_start = hypot(dx0, dy0);
+
+  if(dist_from_start < m_cable_length) {
+    // Towed body stays at starting location until cable is fully deployed
+    m_towed_x = m_start_x;
+    m_towed_y = m_start_y;
+  }
+  else {
+
+  }
 
   // -----------------------
   // Publish position and visuals
