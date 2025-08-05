@@ -43,6 +43,11 @@ class Towing : public AppCastingMOOSApp
  double m_start_x;
  double m_start_y;
  double m_prev_heading;
+ double m_towed_vx; // Velocity of towed body in x direction
+ double m_towed_vy; // Velocity of towed body in y direction
+ double m_prev_time; // Previous time for velocity calculation
+ bool m_deployed;
+ double m_cable_distance; //for trouble-shooting
 };
 
 #endif 

@@ -27,8 +27,11 @@ Towing::Towing()
   m_towing_position.clear();
   m_start_x = 0;
   m_start_y = 0;
-  m_cable_length = 10; // default value
   m_prev_heading = 0; 
+  m_towed_vx = m_towed_vy = 0; // Initialize towed body velocity
+  m_prev_time = 0; // Initialize previous time
+  m_deployed = false;
+  m_cable_distance = 0; // Initialize cable distance for troubleshooting
 }
 
 //---------------------------------------------------------
@@ -93,7 +96,15 @@ bool Towing::Iterate()
 {
   AppCastingMOOSApp::Iterate();
 
-// On first position update, store starting point
+  //Establish time increment
+  double now = MOOSTime();
+  if(m_prev_time == 0) {
+    m_prev_time = now; // Initialize on first call
+  }
+  double dt = std::max(1e-3, now - m_prev_time); // Time since last iteration
+  m_prev_time = now; // Update previous time
+
+  // On first position update, store starting point
   if(m_towing_position.size() == 0) {
     m_start_x = m_nav_x;
     m_start_y = m_nav_y;
@@ -113,35 +124,55 @@ bool Towing::Iterate()
   double dy0 = m_nav_y - m_start_y;
   double dist_from_start = hypot(dx0, dy0);
 
-  if(dist_from_start < m_cable_length) {
-    // Towed body stays at starting location until cable is fully deployed
-    m_towed_x = m_start_x;
-    m_towed_y = m_start_y;
+  if(!m_deployed)
+  {
+    if(dist_from_start < m_cable_length) 
+    {
+      // Towed body stays at starting location until cable is fully deployed
+      m_towed_x = m_start_x;
+      m_towed_y = m_start_y;
+      Notify("TOW_DEPLOYED", "false");
+      m_cable_distance = dist_from_start; // Store for troubleshooting
+    }
+    else 
+    {
+      m_deployed = true; // Cable fully deployed, switch to tow model
+      Notify("TOW_DEPLOYED", "true");
+    }
   }
-  else {
+
+  if(m_deployed) 
+  {
     // -----------------------
     // Spring-Pull Tow Model
     // -----------------------
     double dx = m_nav_x - m_towed_x;
     double dy = m_nav_y - m_towed_y;
-    double distance = hypot(dx, dy);
+    double distance = hypot(dx, dy); // Current distance between vessel and towed body
+    m_cable_distance = distance; // Store for troubleshooting
 
-    if(distance > 0.01) {
+    if(distance > 0.01) //prevent division by zero
+    {
       double dir_x = dx / distance;
       double dir_y = dy / distance;
 
-      if(distance > m_cable_length) {
-        // Apply spring pull toward vessel if cable stretched
-        double pull_strength = 0.15; // tuning parameter
+      // Apply spring pull toward vessel if cable stretched
+      if(distance > m_cable_length) //only applies when cable is taut
+      {
         double overshoot = distance - m_cable_length;
-        m_towed_x += pull_strength * overshoot * dir_x;
-        m_towed_y += pull_strength * overshoot * dir_y;
+        double k = 5; // spring constant, tune as needed (1/s^2); 5 for now due to cable stretching past length
+        m_towed_vx += k * overshoot * dir_x * dt; // Update x velocity
+        m_towed_vy += k * overshoot * dir_y * dt; // Update y velocity
       }
 
-      // Optional: apply smoothing (helps dampen oscillations)
-      double alpha = 0.25;
-      m_towed_x = alpha * m_towed_x + (1 - alpha) * (m_towed_x);
-      m_towed_y = alpha * m_towed_y + (1 - alpha) * (m_towed_y);
+      //simple drag
+      double c = .2; //linear drag (1/s)
+      m_towed_vx -= c * m_towed_vx * dt; // Update x velocity with drag
+      m_towed_vy -= c * m_towed_vy * dt; // Update y velocity with drag
+
+      //integrate velocity to get new position
+      m_towed_x += m_towed_vx * dt;
+      m_towed_y += m_towed_vy * dt;
     }
   }
 
@@ -247,6 +278,8 @@ bool Towing::buildReport()
   m_msgs << " TOWED_X: " << m_towed_x << endl;
   m_msgs << " TOWED_Y: " << m_towed_y << endl;
   m_msgs << " CABLE_LENGTH: " << m_cable_length << endl;
+  m_msgs << " CABLE_DISTANCE: " << m_cable_distance << endl;
+  m_msgs << " Deployed: " << (m_deployed ? "true" : "false") << endl;
 
   return(true);
 }
