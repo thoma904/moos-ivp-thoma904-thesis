@@ -153,8 +153,8 @@ bool Towing::Iterate()
 
     if(distance > 0.01) //prevent division by zero
     {
-      double dir_x = dx / distance;
-      double dir_y = dy / distance;
+      double dir_x = dx / distance; //unit direction vector component
+      double dir_y = dy / distance; //unit direction vector component
 
       // Apply spring pull toward vessel if cable stretched
       if(distance > m_cable_length) //only applies when cable is taut
