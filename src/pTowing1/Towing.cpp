@@ -169,10 +169,21 @@ bool Towing::Iterate()
 
     if(distance > 0.01) //avoid division by zero
     {
+
+      // Build a point L behind the boat along current heading
+      double ax = m_nav_x - m_cable_length * cos(hdg_rad);
+      double ay = m_nav_y - m_cable_length * sin(hdg_rad);
+
+      double dx_dir = ax - m_towed_x;
+      double dy_dir = ay - m_towed_y;
+      double d_dir  = hypot(dx_dir, dy_dir);
+      if (d_dir < 1e-6) 
+        d_dir = 1.0;
+
       // Normalize the vector from towed body to vessel
       // to get unit vector in the direction of the cable
-      double ux = dx / distance;          // unit vector x
-      double uy = dy / distance;          // unit vector y
+      double ux = dx_dir / d_dir;          // unit vector x
+      double uy = dy_dir / d_dir;          // unit vector y
 
       // Calculate tangential unit vector (perpendicular to cable)
       double nx = -uy; // unit vector normal x
@@ -221,7 +232,7 @@ bool Towing::Iterate()
         // Remove outward radial velocity so it doesn't re‑stretch immediately
         double urx = sx / dist2, ury = sy / dist2;
         double vrad = m_towed_vx*urx + m_towed_vy*ury;
-        if(vrad > 0) 
+        if(vrad < 0) 
         { // only if pointing outward
           m_towed_vx -= vrad * urx;
           m_towed_vy -= vrad * ury;
@@ -360,4 +371,4 @@ std::string Towing::join(const vector<string> &vec, const string &delim) {
 }
 
 
-//body does not align perfectly with vehicle.
+//consider using a cable length behind the vessel as an anchor point to guide the towed body instead of the vessel's current position
