@@ -171,8 +171,12 @@ bool Towing::Iterate()
     {
 
       // Build a point L behind the boat along current heading
-      double ax = m_nav_x - m_cable_length * cos(hdg_rad);
-      double ay = m_nav_y - m_cable_length * sin(hdg_rad);
+      double ax = m_nav_x, ay = m_nav_y;
+      if (m_nav_speed > 0.1) // Filter out extreme low speed/stopped cases
+      {  
+        ax = m_nav_x - m_cable_length * cos(hdg_rad);
+        ay = m_nav_y - m_cable_length * sin(hdg_rad);
+      }
 
       double dx_dir = ax - m_towed_x;
       double dy_dir = ay - m_towed_y;
@@ -201,6 +205,7 @@ bool Towing::Iterate()
       // --- Quadratic drag based on the tow‑fish speed ---
       // This simulates the drag force proportional to the square of the speed
       // Essentially uses towing body speed to calculate drag
+
       double speed = hypot(m_towed_vx, m_towed_vy);
       if(speed > 1e-6) 
       {
@@ -240,16 +245,6 @@ bool Towing::Iterate()
       }
     }
   }
-
-  else 
-  {
-    // If not deployed, keep towed body at the start position
-    m_towed_x = m_start_x;
-    m_towed_y = m_start_y;
-    m_towed_vx = 0;
-    m_towed_vy = 0;
-  }
-
 
   // -----------------------
   // Publish heading
