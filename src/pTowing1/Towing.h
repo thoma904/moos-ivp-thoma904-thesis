@@ -48,6 +48,9 @@ class Towing : public AppCastingMOOSApp
  double m_prev_time; // Previous time for velocity calculation
  bool m_deployed;
  double m_cable_distance; //for trouble-shooting
+ double m_nav_speed; // Vessel speed
+ double m_nav_vx; // Vessel velocity in x direction
+ double m_nav_vy; // Vessel velocity in y direction
 };
 
 #endif 
