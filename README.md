@@ -1,35 +1,37 @@
-# moos-ivp-extend
+# moos-ivp-thoma904-thesis
 
 |              |                        |
 |:------------ |:---------------------- |
-| FILE:        | moos-ivp-extend/README |
-| DATE:        | 2014/01/02             |
-| DESCRIPTION: | Contains important information regarding the moos-ivp-extend repository. |
+| FILE:        | moos-ivp-thoma904-thesis/README |
+| DATE:        | 2025/08/11             |
+| DESCRIPTION: | Contains beta apps for integrating towed bodies into the MOOS-IVP framework. |
 
 
 # Introduction
 
-The moos-ivp-extend repository contains examples for extending the MOOS-IvP
-Autonomy system. This includes a MOOS application and an IvP behavior.
+This repository contains codes for extending the MOOS-IVP Autonomy system to factor in towed body behavior. This includes a MOOS application only as of 11AUG25. Constructed to build and launch.
 
 
-# Directory Structure
+# Applications
 
-The directory structure for the moos-ivp-extend is described below:
+The relevant applications for this repo are described below:
 
-| Directory        | Description                                 |
+| src/             | Description                                 |
 |:---------------- |:------------------------------------------- |
-| bin              | Directory for generated executable files    |
-| build            | Directory for build object files            |
-| build.sh         | Script for building moos-ivp-extend         |
-| CMakeLists.txt   | CMake configuration file for the project    |
-| data             | Directory for storing data                  |
-| lib              | Directory for generated library files       |
-| missions         | Directory for mission files                 |
-| README           | Contains helpful information - (this file). |
-| scripts          | Directory for script files                  |
-| src              | Directory for source code                   |
+| pTowing          | Basic "breadcrumb" model                    |
+| pTowing1         | Mass-Spring-Damper model (Recommended)      |
+| pTowing2         | Expanded model based on Newman EoM (no work)|
 
+# Missions
+
+| missions/        | Description                                 |
+|:---------------- |:------------------------------------------- |
+| Towing_1         | Basic alder mission (waypoint and back)     |
+| Towing_2         | Leg run mission with complex turns          |
+
+# Behaviors
+
+None as of yet.
 
 # Build Instructions
 
@@ -53,32 +55,14 @@ within this directory:
    $ cd ..
 ```
 
+# Launch Instructions
 
-## Windows Users
+After building navigate to missions/Towing_2 and run the supplied launch script:
 
-To build on Windows platform, open CMake using your favorite shortcut. Then
-set the source directory to be this directory and set the build directory
-to the "build" directory inside this directory.
-
-The source directory is typically next to the question:
-   "Where is the source code?"
-
-The build directory is typically next to the question:
-   "Where to build the binaries?"
-
-Alternatively, CMake can be invoked via the command line. However, you must
-specify your generator. Use "cmake --help" for a list of generators and
-additional help.
-
-
-# Environment variables
-
-The moos-ivp-extend binaries files should be added to your path to allow them
-to be launched from pAntler.
-
-In order for generated IvP Behaviors to be recognized by the IvP Helm, you
-should add the library directory to the "IVP_BEHAVIOR_DIRS" environment
-variable.
+'''bash
+   $ cd missions/Towing_2
+   $ ./launch.sh
+'''
 
 # END of README
 
