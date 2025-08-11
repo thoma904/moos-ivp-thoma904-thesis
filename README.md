@@ -59,10 +59,10 @@ within this directory:
 
 After building navigate to missions/Towing_2 and run the supplied launch script:
 
-'''bash
+```bash
    $ cd missions/Towing_2
-   $ ./launch.sh
-'''
+   $ ./launch.sh {time warp if desired}
+```
 
 # END of README
 
