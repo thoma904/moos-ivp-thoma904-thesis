@@ -58,3 +58,9 @@ Behavior = BHV_Waypoint
   point      = 0,0
 }
 
+//----------------------------------------------
+Behavior = BHV_Towing
+{
+  name       = towing
+  pwt        = 100
+}
