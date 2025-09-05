@@ -259,9 +259,12 @@ bool Towing::Iterate()
   string tb_pos_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
                       doubleToStringX(m_towed_y,1);
   Notify("TOWING_POSITION", tb_pos_str);
+  Notify("TOWED_X", m_towed_x);
+  Notify("TOWED_Y", m_towed_y);
 
   string tb_hdg_str = "heading=" + doubleToStringX(tow_heading,1);
   Notify("TOWING_HEADING", tb_hdg_str);
+  Notify("TOWED_HEADING", tow_heading);
 
   // VIEW_POINT for MarineViewer
   string body_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
