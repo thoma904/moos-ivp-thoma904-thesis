@@ -25,8 +25,16 @@ BHV_Towing::BHV_Towing(IvPDomain domain) :
   // Declare the behavior decision space
   m_domain = subDomain(m_domain, "course,speed");
 
+  //Parameters
+  m_osx = 0;
+  m_osy = 0;
+  m_os_heading = 0;
+  m_towed_x = 0;
+  m_towed_y = 0;
+  m_towed_heading = 0;
+
   // Add any variables this behavior needs to subscribe for
-  addInfoVars("NAV_X, NAV_Y");
+  addInfoVars("NAV_X, NAV_Y, TOWED_X, TOWED_Y, TOWED_HEADING");
 }
 
 //---------------------------------------------------------------
@@ -116,6 +124,29 @@ void BHV_Towing::onRunToIdleState()
 
 IvPFunction* BHV_Towing::onRunState()
 {
+  // Part 1: Get vehicle position from InfoBuffer and post a
+  bool ok1, ok2, ok3, ok4, ok5, ok6;
+    
+  m_osx = getBufferDoubleVal("NAV_X", ok1);
+  m_osy = getBufferDoubleVal("NAV_Y", ok2);
+  m_os_heading = getBufferDoubleVal("DESIRED_HEADING", ok3);
+
+  if(!ok1 || !ok2 || !ok3 ) 
+  {
+    postWMessage("No ownship X/Y/Heading info in info_buffer.");
+    return(0);
+  }
+
+  m_towed_x = getBufferDoubleVal("TOWED_X", ok4);
+  m_towed_y = getBufferDoubleVal("TOWED_Y", ok5);
+  m_towed_heading = getBufferDoubleVal("TOWED_HEADING", ok6);
+
+  if(!ok4 || !ok5 || !ok6 ) 
+  {
+    postWMessage("No towed X/Y/Heading info in info_buffer.");
+    return(0);
+  }
+  
   // Part 1: Build the IvP function
   IvPFunction *ipf = 0;
 

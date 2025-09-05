@@ -31,6 +31,12 @@ protected: // Local Utility functions
 protected: // Configuration parameters
 
 protected: // State variables
+  double m_osx;
+  double m_osy;
+  double m_os_heading;
+  double m_towed_x;
+  double m_towed_y;
+  double m_towed_heading;
 };
 
 #define IVP_EXPORT_FUNCTION
