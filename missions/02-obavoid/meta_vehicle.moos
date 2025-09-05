@@ -25,6 +25,7 @@ Processconfig = ANTLER
   Run = uFldNodeBroker @ NewConsole = false
   Run = uLoadWatch     @ NewConsole = false
   Run = pObstacleMgr   @ NewConsole = false
+  Run = pTowing        @ NewConsole = false
 }
 
 #include plugs.moos <pShare>
@@ -212,3 +213,13 @@ ProcessConfig = pLogger
 	WildCardOmitPattern = PID_REPORT	
 }
 	
+//------------------------------------------
+// pTowing config block
+
+ProcessConfig = pTowing
+{
+  AppTick	  = 20
+  CommsTick	= 20
+
+  cable_length = 30
+}
