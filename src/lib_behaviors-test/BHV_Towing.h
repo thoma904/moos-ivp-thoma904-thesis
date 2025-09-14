@@ -27,6 +27,7 @@ public:
   IvPFunction* onRunState();
 
 protected: // Local Utility functions
+IvPFunction* buildFunctionWithZAIC();
 
 protected: // Configuration parameters
 
@@ -37,6 +38,8 @@ protected: // State variables
   double m_towed_x;
   double m_towed_y;
   double m_towed_heading;
+  bool   m_tow_act;
+  string m_ipf_type;
 };
 
 #define IVP_EXPORT_FUNCTION

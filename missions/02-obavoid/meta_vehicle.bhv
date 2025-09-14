@@ -137,3 +137,10 @@ Behavior=BHV_AvoidObstacleV24
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
 }
+
+Behavior=BHV_Towing
+{
+  name       = tow_avdobs24_
+  pwt        = 1000
+  condition  = DEPLOY = true
+}

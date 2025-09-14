@@ -10,6 +10,9 @@
 #include "MBUtils.h"
 #include "BuildUtils.h"
 #include "BHV_Towing.h"
+#include "ZAIC_PEAK.h"
+#include "AngleUtils.h"
+#include "OF_Coupler.h"
 
 using namespace std;
 
@@ -32,9 +35,11 @@ BHV_Towing::BHV_Towing(IvPDomain domain) :
   m_towed_x = 0;
   m_towed_y = 0;
   m_towed_heading = 0;
+  m_tow_act = false;
+  m_ipf_type  = "zaic";
 
   // Add any variables this behavior needs to subscribe for
-  addInfoVars("NAV_X, NAV_Y, TOWED_X, TOWED_Y, TOWED_HEADING");
+  addInfoVars("NAV_X, NAV_Y, NAV_HEADING, TOWED_X, TOWED_Y, TOWED_HEADING");
 }
 
 //---------------------------------------------------------------
@@ -149,8 +154,13 @@ IvPFunction* BHV_Towing::onRunState()
   
   // Part 1: Build the IvP function
   IvPFunction *ipf = 0;
-
-
+  if(m_tow_act)
+  {
+    if(m_ipf_type == "zaic")
+      ipf = buildFunctionWithZAIC();
+    if(ipf == 0) 
+      postWMessage("Problem Creating the IvP Function");
+  }
 
   // Part N: Prior to returning the IvP function, apply the priority wt
   // Actual weight applied may be some value different than the configured
