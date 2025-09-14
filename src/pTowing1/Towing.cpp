@@ -370,3 +370,10 @@ std::string Towing::join(const vector<string> &vec, const string &delim) {
 
 
 //consider using a cable length behind the vessel as an anchor point to guide the towed body instead of the vessel's current position
+
+//register for positions of obstacles and have the towed body avoid them
+//make more realistic shape of towed body for obstacle avoidance
+//are the obstacles on the fly or pre-known?
+//how are they representing obstacles in the MOOS world?
+//how to convert bathymetry to obstacles?
+//bound the behavior to avoid straight line and breadcrumb paths
