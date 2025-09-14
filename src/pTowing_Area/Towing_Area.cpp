@@ -133,6 +133,9 @@ delta_deg = std::fmod(delta_deg + 540.0, 360.0) - 180.0;
 
 if(m_tow_deployed)
 {
+
+  //add uncertainty circle around towed vehicle
+
 // If almost aligned, don't draw (optional threshold)
 if(std::fabs(delta_deg) < 1.0) 
 {
@@ -223,7 +226,7 @@ void Towing_Area::registerVariables()
   AppCastingMOOSApp::RegisterVariables();
   Register("NAV_X", 0);
   Register("NAV_Y", 0);
-  Register("NAV_HEADING", 0);
+  Register("NAV_HEADING", 0); //use desired heading instead?
   Register("NAV_SPEED", 0);
   Register("TOW_DEPLOYED", 0);
   Register("TOWED_X", 0);
