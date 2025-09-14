@@ -69,8 +69,14 @@ bool Towing_Area::OnNewMail(MOOSMSG_LIST &NewMail)
      else if(key == "NAV_SPEED") 
        m_nav_speed = msg.GetDouble();
 
-     else if(key == "TOW_DEPLOYED") 
-       m_tow_deployed = msg.GetDouble();
+     else if(key == "TOW_DEPLOYED")
+     { 
+       bool   mstr  = msg.IsString();
+        if(mstr)
+          m_tow_deployed = (msg.GetString() == "true");
+        else
+          m_tow_deployed = (msg.GetDouble() != 0);
+     } 
 
      else if(key == "TOWED_X") 
        m_towed_x = msg.GetDouble();
@@ -78,7 +84,7 @@ bool Towing_Area::OnNewMail(MOOSMSG_LIST &NewMail)
      else if(key == "TOWED_Y") 
        m_towed_y = msg.GetDouble();
 
-     else if(key == "TOWED_Heading") 
+     else if(key == "TOWED_HEADING") 
        m_towed_heading = msg.GetDouble();
 
      else if(key != "APPCAST_REQ") // handled by AppCastingMOOSApp
@@ -117,7 +123,7 @@ bool Towing_Area::Iterate()
   double future_pos_x = m_nav_x + dist_ahead * std::cos(hdg_rad);
   double future_pos_y = m_nav_y + dist_ahead * std::sin(hdg_rad);
 
-    // --- Build a minimal "avoidance zone" triangle ---
+  // --- Build a minimal "avoidance zone" triangle ---
   // Line from tow -> future pos, with a small width at the tow end.
   double dx = future_pos_x - m_towed_x;
   double dy = future_pos_y - m_towed_y;
@@ -146,6 +152,9 @@ bool Towing_Area::Iterate()
   double p3x = future_pos_x;
   double p3y = future_pos_y;
 
+
+  if(m_tow_deployed)
+  {
   // --- Publish as a VIEW_POLYGON spec string (no XYPolygon needed) ---
   std::string spec = "pts={";
   spec += doubleToStringX(p1x,1) + "," + doubleToStringX(p1y,1) + ":";
@@ -156,6 +165,8 @@ bool Towing_Area::Iterate()
   spec += ",edge_size=1,vertex_size=0";
 
   Notify("VIEW_POLYGON", spec);
+
+  }
 
   AppCastingMOOSApp::PostReport();
   return(true);
@@ -225,9 +236,9 @@ bool Towing_Area::buildReport()
   m_msgs << "============================================" << endl;
 
   ACTable actab(4);
-  actab << "Alpha | Bravo | Charlie | Delta";
+  actab << "Tow Deployed | Bravo | Charlie | Delta";
   actab.addHeaderLines();
-  actab << "one" << "two" << "three" << "four";
+  actab << m_tow_deployed << "two" << "three" << "four";
   m_msgs << actab.getFormattedString();
 
   return(true);
