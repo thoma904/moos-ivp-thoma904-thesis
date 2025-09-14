@@ -130,6 +130,9 @@ double tow_pt_y  = m_towed_y + extent_m * std::sin(tow_rad);
 double delta_deg = m_nav_heading - m_towed_heading;
 delta_deg = std::fmod(delta_deg + 540.0, 360.0) - 180.0;
 
+
+if(m_tow_deployed)
+{
 // If almost aligned, don't draw (optional threshold)
 if(std::fabs(delta_deg) < 1.0) 
 {
@@ -167,8 +170,32 @@ else {
   ray_tow += doubleToStringX(tow_pt_x,1)  + "," + doubleToStringX(tow_pt_y,1)  + "}";
   ray_tow += ",label=DELTA_RAY_TOW,edge_color=white,edge_size=1,vertex_size=0";
   Notify("VIEW_SEGLIST", ray_tow);
+
+  // --- Uncertainty circle around the tow (as a simple N-gon) ---
+{
+  const double r_base   = 3.0;    // base radius (m)
+  const double r_gain   = 1.5;    // radius grows with drift (m per m/s)
+  const double r_min    = 2.0;
+  const double r_max    = 10.0;
+  // Reuse tow_speed_est if you added snippet (A); otherwise just set to 0
+  double r = std::clamp(r_base + r_gain * tow_speed_est, r_min, r_max);
+
+  const int N = 20; // resolution of the “circle”
+  std::string circ = "pts={";
+  for(int i=0;i<N;i++){
+    double a = 2.0*M_PI * (double)i / (double)N;
+    double x = m_towed_x + r * std::cos(a);
+    double y = m_towed_y + r * std::sin(a);
+    circ += doubleToStringX(x,1) + "," + doubleToStringX(y,1);
+    circ += (i < N-1) ? ":" : "}";
+  }
+  circ += ",label=TOW_UNCERT,edge_color=yellow,fill_color=yellow,fill_transparency=0.25";
+  circ += ",edge_size=1,vertex_size=0";
+  Notify("VIEW_POLYGON", circ);
 }
 
+}
+}
 
   AppCastingMOOSApp::PostReport();
   return(true);
