@@ -111,62 +111,64 @@ bool Towing_Area::Iterate()
 {
   AppCastingMOOSApp::Iterate();
 
-  double heading_diff = m_nav_heading - m_towed_heading;
-  double distance_diff = hypot((m_nav_x - m_towed_x), (m_nav_y - m_towed_y));
+// ---- Visualize the wedge ("delta") between ship and tow headings ----
+// Project both rays from the TOW position, same length
+const double lookahead_s = 10.0;
+double extent_m = std::max(m_nav_speed * lookahead_s, 8.0);  // min size so it's visible
 
-  //from towed x and towed y to future positions should be avoidance zone
+// MOOS heading: 0=N, 90=E  → radians (x-east, y-north)
+const double ship_rad = (M_PI/180.0) * (90.0 - m_nav_heading);
+const double tow_rad  = (M_PI/180.0) * (90.0 - m_towed_heading);
 
-  const double lookahead_s = 1;
-  const double hdg_rad = (M_PI/180.0) * (90.0 - m_nav_heading); // MOOS→radians
-  const double dist_ahead = m_nav_speed * lookahead_s;
+// Points at equal range along each heading, *anchored at the tow*
+double ship_pt_x = m_towed_x + extent_m * std::cos(ship_rad);
+double ship_pt_y = m_towed_y + extent_m * std::sin(ship_rad);
+double tow_pt_x  = m_towed_x + extent_m * std::cos(tow_rad);
+double tow_pt_y  = m_towed_y + extent_m * std::sin(tow_rad);
 
-  double future_pos_x = m_nav_x + dist_ahead * std::cos(hdg_rad);
-  double future_pos_y = m_nav_y + dist_ahead * std::sin(hdg_rad);
+// Signed smallest angle (ship minus tow) in [-180,180]
+double delta_deg = m_nav_heading - m_towed_heading;
+delta_deg = std::fmod(delta_deg + 540.0, 360.0) - 180.0;
 
-  // --- Build a minimal "avoidance zone" triangle ---
-  // Line from tow -> future pos, with a small width at the tow end.
-  double dx = future_pos_x - m_towed_x;
-  double dy = future_pos_y - m_towed_y;
-  double L  = hypot(dx, dy);
+// If almost aligned, don't draw (optional threshold)
+if(std::fabs(delta_deg) < 1.0) 
+{
+  // (skip drawing the wedge if the delta is tiny)
+} 
+else {
+  // Color by side: starboard (ship clockwise of tow) = red, port = cyan
+  std::string color = (delta_deg >= 0.0) ? "red" : "cyan";
 
-  // Avoid degenerate triangle if very short
-  if(L < 1e-6) {
-    dx = std::cos(hdg_rad);
-    dy = std::sin(hdg_rad);
-    L  = 1.0;
-    future_pos_x = m_towed_x + dx;
-    future_pos_y = m_towed_y + dy;
-  }
-
-  // Perpendicular unit vector to give the triangle some width near the tow
-  double nx = -dy / L;
-  double ny =  dx / L;
-
-  const double half_width_m = 3.0; // visual half-width at the tow (adjust to taste)
-
-  // Triangle vertices: tow-left, tow-right, future apex
-  double p1x = m_towed_x + nx * half_width_m;
-  double p1y = m_towed_y + ny * half_width_m;
-  double p2x = m_towed_x - nx * half_width_m;
-  double p2y = m_towed_y - ny * half_width_m;
-  double p3x = future_pos_x;
-  double p3y = future_pos_y;
-
+  // Build the triangle: tow → ship-ray point → tow-ray point
+  std::string spec = "pts={";
+  spec += doubleToStringX(m_towed_x,1) + "," + doubleToStringX(m_towed_y,1) + ":";
+  spec += doubleToStringX(ship_pt_x,1) + "," + doubleToStringX(ship_pt_y,1) + ":";
+  spec += doubleToStringX(tow_pt_x,1)  + "," + doubleToStringX(tow_pt_y,1)  + "}";
+  spec += ",label=TOW_DELTA";
+  spec += ",edge_size=1,vertex_size=0";
+  spec += ",fill_transparency=0.25";
+  spec += ",edge_color=" + color;
+  spec += ",fill_color=" + color;
 
   if(m_tow_deployed)
-  {
-  // --- Publish as a VIEW_POLYGON spec string (no XYPolygon needed) ---
-  std::string spec = "pts={";
-  spec += doubleToStringX(p1x,1) + "," + doubleToStringX(p1y,1) + ":";
-  spec += doubleToStringX(p2x,1) + "," + doubleToStringX(p2y,1) + ":";
-  spec += doubleToStringX(p3x,1) + "," + doubleToStringX(p3y,1) + "}";
-  spec += ",label=TOW_AVOID";
-  spec += ",edge_color=red,fill_color=red,fill_transparency=0.25";
-  spec += ",edge_size=1,vertex_size=0";
+    Notify("VIEW_POLYGON", spec);
 
-  Notify("VIEW_POLYGON", spec);
+  // (Optional) draw the two rays so the edges of the wedge are obvious
+  // Ship heading ray
+  std::string ray_ship = "pts={";
+  ray_ship += doubleToStringX(m_towed_x,1) + "," + doubleToStringX(m_towed_y,1) + ":";
+  ray_ship += doubleToStringX(ship_pt_x,1) + "," + doubleToStringX(ship_pt_y,1) + "}";
+  ray_ship += ",label=DELTA_RAY_SHIP,edge_color=white,edge_size=2,vertex_size=0";
+  Notify("VIEW_SEGLIST", ray_ship);
 
-  }
+  // Tow heading ray
+  std::string ray_tow = "pts={";
+  ray_tow += doubleToStringX(m_towed_x,1) + "," + doubleToStringX(m_towed_y,1) + ":";
+  ray_tow += doubleToStringX(tow_pt_x,1)  + "," + doubleToStringX(tow_pt_y,1)  + "}";
+  ray_tow += ",label=DELTA_RAY_TOW,edge_color=white,edge_size=1,vertex_size=0";
+  Notify("VIEW_SEGLIST", ray_tow);
+}
+
 
   AppCastingMOOSApp::PostReport();
   return(true);
