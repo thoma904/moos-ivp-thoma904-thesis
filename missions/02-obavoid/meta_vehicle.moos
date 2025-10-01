@@ -108,6 +108,12 @@ ProcessConfig = pNodeReporter
   platform_type = kayak
 	terse_reports = true
 
+
+  // ***** Alt-nav for the tow body *****
+  alt_nav_prefix    = TOWED     // will subscribe to TOWED_X, TOWED_Y, ...
+  alt_nav_name      = _TOW      // NAME becomes <VNAME>_TOW
+  alt_nav_group     = towing    // optional grouping in viewers
+
 	platform_color = $(COLOR)
 }
 
