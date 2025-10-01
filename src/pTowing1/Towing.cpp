@@ -216,7 +216,7 @@ bool Towing::Iterate()
 
       // --- Extra tangential damping (Returns towed body to centerline) ---
       double vt = m_towed_vx*nx + m_towed_vy*ny;    // sideways
-      double c_tan = 1; // 1/s  (tuneable)
+      double c_tan = 2; // 1/s  (tuneable)
       m_towed_vx += (-c_tan * vt) * nx * dt;
       m_towed_vy += (-c_tan * vt) * ny * dt;
 
