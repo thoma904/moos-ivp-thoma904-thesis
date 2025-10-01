@@ -116,7 +116,7 @@ bool Towing_Area::Iterate()
 const double lookahead_s = 10.0;
 double extent_m = std::max(m_nav_speed * lookahead_s, 8.0);  // min size so it's visible
 
-// MOOS heading: 0=N, 90=E  → radians (x-east, y-north)
+// Heading: 0=N, 90=E  → radians (x-east, y-north)
 const double ship_rad = (M_PI/180.0) * (90.0 - m_nav_heading);
 const double tow_rad  = (M_PI/180.0) * (90.0 - m_towed_heading);
 
@@ -136,10 +136,10 @@ if(m_tow_deployed)
 
   //add uncertainty circle around towed vehicle
 
-// If almost aligned, don't draw (optional threshold)
+// If almost aligned, don't draw
 if(std::fabs(delta_deg) < 1.0) 
 {
-  // (skip drawing the wedge if the delta is tiny)
+  // skip drawing the wedge if the delta is tiny
 } 
 else {
   // Color by side: starboard (ship clockwise of tow) = red, port = cyan
@@ -159,7 +159,7 @@ else {
   if(m_tow_deployed)
     Notify("VIEW_POLYGON", spec);
 
-  // (Optional) draw the two rays so the edges of the wedge are obvious
+  // Draw the two rays so the edges of the wedge are obvious
   // Ship heading ray
   std::string ray_ship = "pts={";
   ray_ship += doubleToStringX(m_towed_x,1) + "," + doubleToStringX(m_towed_y,1) + ":";
