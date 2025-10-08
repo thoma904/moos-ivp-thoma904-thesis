@@ -282,6 +282,28 @@ bool Towing::Iterate()
   cable_str += ",edge_color=gray,edge_size=2,vertex_size=0";
   Notify("VIEW_SEGLIST", cable_str);
 
+  // -----------------------
+  // Publish NODE_REPORT_LOCAL for the towed body (acts like a node)
+  // -----------------------
+
+  // Prefer heading from tow velocity; fallback to cable bearing if nearly stopped
+  double tow_speed = hypot(m_towed_vx, m_towed_vy);
+  double tow_hdg_vel = (tow_speed > 0.05) ? relAng(0, 0, m_towed_vx, m_towed_vy) : tow_heading;  // fall back to cable direction
+
+  std::ostringstream tow_nr;
+  tow_nr << "NAME="   << m_host_community << "_TOW"      // unique name
+        << ",TYPE="  << "heron"      // pick any known type
+        << ",TIME="  << std::fixed << m_curr_time        // AppCastingMOOSApp time
+        << ",X="     << doubleToStringX(m_towed_x, 2)
+        << ",Y="     << doubleToStringX(m_towed_y, 2)
+        << ",SPD="   << doubleToStringX(tow_speed, 2)
+        << ",HDG="   << doubleToStringX(angle360(tow_hdg_vel), 1)
+        << ",LENGTH="<< 3.0                               // optional visual hint
+        << ",MODE="  << "TOWING"
+        << ",COLOR=" << "orange";                        // helps distinguish in viewer
+
+  Notify("NODE_REPORT_LOCAL", tow_nr.str());
+
   AppCastingMOOSApp::PostReport();
   return(true);
 }

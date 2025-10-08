@@ -108,11 +108,19 @@ ProcessConfig = pNodeReporter
   platform_type = kayak
 	terse_reports = true
 
+	platform_color = $(COLOR)
+}
 
-  // ***** Alt-nav for the tow body *****
-  alt_nav_prefix    = TOWED     // will subscribe to TOWED_X, TOWED_Y, ...
-  alt_nav_name      = _TOW      // NAME becomes <VNAME>_TOW
-  alt_nav_group     = towing    // optional grouping in viewers
+//-------------------------------------------------
+// pNodeReporter Config Block
+
+ProcessConfig = pNodeReporter_tow
+{
+  AppTick     = 2
+  CommsTick   = 2
+  
+  platform_type = heron
+	terse_reports = true
 
 	platform_color = $(COLOR)
 }
