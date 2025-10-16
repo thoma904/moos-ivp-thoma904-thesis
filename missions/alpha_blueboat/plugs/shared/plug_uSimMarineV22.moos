@@ -1,0 +1,52 @@
+//-------------------------------------------
+// uSimMarineV22 Config Block
+
+ProcessConfig = uSimMarineV22
+{
+  AppTick   = 6
+  CommsTick = 6
+
+  start_pos = $(START_POS)
+  prefix    = NAV
+
+
+  // Below Parameters for embedded PID control. All params
+  // similar to those for pMarinePID
+  
+  depth_control = false
+  //active_start  = true
+  
+  // Yaw PID controller
+  yaw_pid_kp             = 3
+  yaw_pid_kp             = 0.4
+  yaw_pid_kd             = 0.1
+  yaw_pid_ki             = 0.0
+  yaw_pid_integral_limit = 0.07
+  
+  // Speed PID controller
+  speed_pid_kp           = 1.0
+  speed_pid_kd           = 0.0
+  speed_pid_ki           = 0.0
+  speed_pid_integral_limit = 0.07
+  
+  // Maximums
+  maxrudder  = 100
+  maxthrust  = 100
+	max_speed = $(MAX_SPD)
+
+	turn_rate = 99
+	turn_spd_loss = 0.6
+	
+  // A non-zero SPEED_FACTOR overrides use of SPEED_PID
+  // Will set DESIRED_THRUST = DESIRED_SPEED * SPEED_FACTOR
+  speed_factor = 20
+	
+	thrust_map = 100:$(MAX_SPD)
+	
+  //wormhole = tag=one, madrid_poly=pts={0,0:100,0:100,100:0,100}
+  //wormhole = tag=one, weber_poly=pts={0,0:100,0:100,100}
+  //wormhole = tag=one, connection=from_weber
+  //wormhole = tag=one, id_change=true
+  //wormhole = tag=one, delay=3
+  //wormhole = tag=one, poke=WPT_UPDATE=speed=2.3	
+}
