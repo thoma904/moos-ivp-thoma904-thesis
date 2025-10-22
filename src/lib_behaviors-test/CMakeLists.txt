@@ -51,7 +51,7 @@ TARGET_LINK_LIBRARIES(BHV_SimpleWaypoint
 #                                      BHV_Towing
 #--------------------------------------------------------
 ADD_LIBRARY(BHV_Towing SHARED 
-   BHV_Towing.cpp )
+   BHV_Towing.cpp)
 TARGET_LINK_LIBRARIES(BHV_Towing
    helmivp
    behaviors 
