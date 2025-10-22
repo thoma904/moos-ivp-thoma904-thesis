@@ -28,6 +28,7 @@ Towing::Towing()
   m_start_x = 0;
   m_start_y = 0;
   m_cable_length = 10; // default value
+  m_nav_speed = 0;
 }
 
 //---------------------------------------------------------
@@ -67,6 +68,9 @@ bool Towing::OnNewMail(MOOSMSG_LIST &NewMail)
 
      else if(key == "NAV_HEADING") 
        m_nav_heading = msg.GetDouble();
+
+     else if(key == "NAV_SPEED") 
+       m_nav_speed = msg.GetDouble();
 
      else if(key != "APPCAST_REQ") // handled by AppCastingMOOSApp
        reportRunWarning("Unhandled Mail: " + key);
@@ -150,9 +154,12 @@ bool Towing::Iterate()
   string tb_pos_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
                     doubleToStringX(m_towed_y,1);
   Notify("TOWING_POSITION", tb_pos_str);
+  Notify("TOWED_X", m_towed_x);
+  Notify("TOWED_Y", m_towed_y);
 
   string tb_hdg_str = "heading=" + doubleToStringX(m_nav_heading,1);
   Notify("TOWING_HEADING", tb_hdg_str);
+  Notify("TOWED_HEADING", m_nav_heading);
 
   // Publish towed body for visualization
   string body_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
@@ -161,6 +168,28 @@ bool Towing::Iterate()
   body_str += ",heading=" + doubleToStringX(m_nav_heading,1);
   Notify("VIEW_POINT", body_str);
 
+  // VIEW_SEGLIST for cable
+  string cable_str = "pts={" + doubleToStringX(m_nav_x,1) + "," +
+                              doubleToStringX(m_nav_y,1) + ":" +
+                              doubleToStringX(m_towed_x,1) + "," +
+                              doubleToStringX(m_towed_y,1) + "}";
+  cable_str += ",label=TOW_LINE";
+  cable_str += ",edge_color=gray,edge_size=2,vertex_size=0";
+  Notify("VIEW_SEGLIST", cable_str);
+
+  std::ostringstream tow_nr;
+  tow_nr << "NAME="   << m_host_community << "_TOW"      
+        << ",TYPE="  << "heron"      
+        << ",TIME="  << std::fixed << m_curr_time        
+        << ",X="     << doubleToStringX(m_towed_x, 2)
+        << ",Y="     << doubleToStringX(m_towed_y, 2)
+        << ",SPD="   << doubleToStringX(m_nav_speed, 2)
+        << ",HDG="   << doubleToStringX(angle360(m_nav_heading), 1)
+        << ",LENGTH="<< 1.0                               
+        << ",MODE="  << "TOWING"
+        << ",COLOR=" << "orange";                        
+
+  Notify("NODE_REPORT_LOCAL", tow_nr.str());
 
   AppCastingMOOSApp::PostReport();
   return(true);
@@ -213,6 +242,7 @@ void Towing::registerVariables()
   Register("NAV_X", 0);
   Register("NAV_Y", 0);
   Register("NAV_HEADING", 0);
+  Register("NAV_SPEED", 0);
 }
 
 

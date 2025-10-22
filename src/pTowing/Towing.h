@@ -41,6 +41,7 @@ class Towing : public AppCastingMOOSApp
  XYSegList m_towing_position;
  double m_start_x;
  double m_start_y;
+ double m_nav_speed;
 };
 
 #endif 

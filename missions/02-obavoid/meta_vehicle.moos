@@ -26,7 +26,7 @@ Processconfig = ANTLER
   Run = uLoadWatch     @ NewConsole = false
   Run = pObstacleMgr   @ NewConsole = false
   Run = pTowing        @ NewConsole = false
-  //Run = pTowing_Area   @ NewConsole = false
+  Run = pTowing_Area   @ NewConsole = false
 }
 
 #include plugs.moos <pShare>

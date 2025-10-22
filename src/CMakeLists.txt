@@ -20,7 +20,7 @@ ADD_SUBDIRECTORY(lib_towbody)
 #ADD_SUBDIRECTORY(app_bezview)
 ADD_SUBDIRECTORY(pExampleApp)
 ADD_SUBDIRECTORY(pXRelayTest)
-ADD_SUBDIRECTORY(pTowing1)
+ADD_SUBDIRECTORY(pTowing)
 ADD_SUBDIRECTORY(pTowing_Area)
 
 ##############################################################################
