@@ -6,13 +6,17 @@
 /************************************************************/
 
 #include <iterator>
+#include <limits>
 #include <cstdlib>
+#include <cmath>
 #include "MBUtils.h"
 #include "BuildUtils.h"
 #include "BHV_Towing.h"
-#include "ZAIC_PEAK.h"
+#include "OF_Reflector.h"
+#include "XYFormatUtilsPoly.h"
+#include "XYPolygon.h"
 #include "AngleUtils.h"
-#include "OF_Coupler.h"
+#include "ZAIC_PEAK.h"
 
 using namespace std;
 
@@ -23,23 +27,14 @@ BHV_Towing::BHV_Towing(IvPDomain domain) :
   IvPBehavior(domain)
 {
   // Provide a default behavior name
-  IvPBehavior::setParam("name", "defaultname");
+  IvPBehavior::setParam("name", "towing");
 
   // Declare the behavior decision space
-  m_domain = subDomain(m_domain, "course,speed");
-
-  //Parameters
-  m_osx = 0;
-  m_osy = 0;
-  m_os_heading = 0;
-  m_towed_x = 0;
-  m_towed_y = 0;
-  m_towed_heading = 0;
-  m_tow_act = false;
-  m_ipf_type  = "zaic";
+  m_domain = subDomain(m_domain, "course");
 
   // Add any variables this behavior needs to subscribe for
-  addInfoVars("NAV_X, NAV_Y, NAV_HEADING, TOWED_X, TOWED_Y, TOWED_HEADING");
+  addInfoVars("TOWED_X, TOWED_Y");
+  addInfoVars(m_obstacle_var);
 }
 
 //---------------------------------------------------------------
@@ -52,14 +47,24 @@ bool BHV_Towing::setParam(string param, string val)
 
   // Get the numerical value of the param argument for convenience once
   double double_val = atof(val.c_str());
-  
-  if((param == "foo") && isNumber(val)) {
-    // Set local member variables here
-    return(true);
-  }
-  else if (param == "bar") {
-    // return(setBooleanOnString(m_my_bool, val));
-  }
+
+  if(param == "peak_width" && isNumber(val)) {
+      m_peak_width = atof(val.c_str());
+      return true;
+    }
+  else if(param == "base_width" && isNumber(val)) {
+      m_base_width = atof(val.c_str());
+      return true;
+    }
+  else if(param == "summit_delta" && isNumber(val)) {
+      m_summit_delta = atof(val.c_str());
+      return true;
+    }
+  else if(param == "obstacle_var") {
+      m_obstacle_var = val;
+      addInfoVars(m_obstacle_var);
+      return true;
+    }
 
   // If not handled above, then just return false;
   return(false);
@@ -129,45 +134,58 @@ void BHV_Towing::onRunToIdleState()
 
 IvPFunction* BHV_Towing::onRunState()
 {
-  // Part 1: Get vehicle position from InfoBuffer and post a
-  bool ok1, ok2, ok3, ok4, ok5, ok6;
-    
-  m_osx = getBufferDoubleVal("NAV_X", ok1);
-  m_osy = getBufferDoubleVal("NAV_Y", ok2);
-  m_os_heading = getBufferDoubleVal("DESIRED_HEADING", ok3);
-
-  if(!ok1 || !ok2 || !ok3 ) 
-  {
-    postWMessage("No ownship X/Y/Heading info in info_buffer.");
-    return(0);
-  }
-
-  m_towed_x = getBufferDoubleVal("TOWED_X", ok4);
-  m_towed_y = getBufferDoubleVal("TOWED_Y", ok5);
-  m_towed_heading = getBufferDoubleVal("TOWED_HEADING", ok6);
-
-  if(!ok4 || !ok5 || !ok6 ) 
-  {
-    postWMessage("No towed X/Y/Heading info in info_buffer.");
-    return(0);
-  }
-  
   // Part 1: Build the IvP function
-  IvPFunction *ipf = 0;
-  if(m_tow_act)
-  {
-    if(m_ipf_type == "zaic")
-      ipf = buildFunctionWithZAIC();
-    if(ipf == 0) 
-      postWMessage("Problem Creating the IvP Function");
+
+    // Tow center
+  bool okx=false, oky=false;
+  double tx = getBufferDoubleVal("TOWED_X", okx);
+  double ty = getBufferDoubleVal("TOWED_Y", oky);
+  if(!okx || !oky)
+    return nullptr;
+
+  // Obstacles (vector<string> of "poly=..." specs)
+  bool ok=true;
+  vector<string> specs = getBufferStringVector(m_obstacle_var, ok);
+  if(!ok || specs.empty())
+    return nullptr;
+
+  // Find the nearest *vertex* on any polygon to the tow center
+  double best_d = numeric_limits<double>::infinity();
+  double vxn=tx, vyn=ty;
+
+  for(const auto& s : specs) {
+    XYPolygon poly = string2Poly(s);
+    if(poly.size() < 1) continue;
+    for(unsigned i=0; i<poly.size(); ++i) {
+      double vx = poly.get_vx(i);
+      double vy = poly.get_vy(i);
+      double d  = hypot(tx - vx, ty - vy);
+      if(d < best_d) { best_d = d; vxn = vx; vyn = vy; }
+    }
   }
 
-  // Part N: Prior to returning the IvP function, apply the priority wt
-  // Actual weight applied may be some value different than the configured
-  // m_priority_wt, depending on the behavior author's insite.
-  if(ipf)
-    ipf->setPWT(m_priority_wt);
+  if(!isfinite(best_d))  // nothing usable
+    return nullptr;
 
-  return(ipf);
+  // Preferred course = away from nearest vertex
+  double bng_to_vert = relAng(tx, ty, vxn, vyn);      // 0..359
+  double crs_pref    = angle360(bng_to_vert + 180.0); // turn away
+
+  // Build a tiny ZAIC over course (fixed widths for simplicity)
+  ZAIC_PEAK crs_zaic(m_domain, "course");
+  crs_zaic.setSummit(crs_pref);
+  crs_zaic.setValueWrap(true);
+  crs_zaic.setPeakWidth(m_peak_width);
+  crs_zaic.setBaseWidth(m_base_width);
+  crs_zaic.setSummitDelta(m_summit_delta);
+
+  if(!crs_zaic.stateOK()){
+    postWMessage("Course ZAIC problem: " + crs_zaic.getWarnings());
+    return nullptr;
+  }
+
+  IvPFunction* ipf = crs_zaic.extractIvPFunction();
+  if(ipf) ipf->setPWT(m_priority_wt);
+  return ipf;
 }
 

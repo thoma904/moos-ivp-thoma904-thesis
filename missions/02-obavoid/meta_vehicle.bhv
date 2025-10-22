@@ -137,3 +137,16 @@ Behavior=BHV_AvoidObstacleV24
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
 }
+
+Behavior = BHV_Towing
+{
+  name          = towing
+  pwt           = 100             // keep modest; AvoidObstacle still leads
+  condition     = MODE==ACTIVE
+
+  // optional tweaks (defaults shown)
+  obstacle_var  = KNOWN_OBSTACLE
+  peak_width    = 30
+  base_width    = 180
+  summit_delta  = 30
+}

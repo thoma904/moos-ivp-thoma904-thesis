@@ -10,6 +10,7 @@
 
 #include <string>
 #include "IvPBehavior.h"
+#include "XYPolygon.h"
 
 class BHV_Towing : public IvPBehavior {
 public:
@@ -27,19 +28,16 @@ public:
   IvPFunction* onRunState();
 
 protected: // Local Utility functions
-IvPFunction* buildFunctionWithZAIC();
 
 protected: // Configuration parameters
 
+string m_obstacle_var = "OBM_GUTS";
+double m_peak_width = 30;
+double m_base_width = 180;
+double m_summit_delta = 30;
+
 protected: // State variables
-  double m_osx;
-  double m_osy;
-  double m_os_heading;
-  double m_towed_x;
-  double m_towed_y;
-  double m_towed_heading;
-  bool   m_tow_act;
-  string m_ipf_type;
+
 };
 
 #define IVP_EXPORT_FUNCTION
