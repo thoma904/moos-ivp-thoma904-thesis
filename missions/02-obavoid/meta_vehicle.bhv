@@ -141,11 +141,11 @@ Behavior=BHV_AvoidObstacleV24
 Behavior = BHV_Towing
 {
   name          = towing
-  pwt           = 100             // keep modest; AvoidObstacle still leads
-  condition     = MODE==ACTIVE
+  pwt           = 100             
+  condition     = Deploy = true
 
   // optional tweaks (defaults shown)
-  obstacle_var  = KNOWN_OBSTACLE
+  obstacle_var  = OBSTACLE_ALERT
   peak_width    = 30
   base_width    = 180
   summit_delta  = 30
