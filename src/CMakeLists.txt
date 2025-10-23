@@ -22,6 +22,7 @@ ADD_SUBDIRECTORY(pExampleApp)
 ADD_SUBDIRECTORY(pXRelayTest)
 ADD_SUBDIRECTORY(pTowing1)
 ADD_SUBDIRECTORY(pTowing_Circle)
+ADD_SUBDIRECTORY(pTowObstacleMgr)
 
 ##############################################################################
 #                           END of CMakeLists.txt
