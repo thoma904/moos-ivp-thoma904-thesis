@@ -170,6 +170,25 @@ ProcessConfig = pObstacleMgr
 	
 } 
 
+ProcessConfig = pTowObstacleMgr
+{
+  AppTick   = 5
+  CommsTick = 5
+
+  // Request from OBM:
+  obm_src_name   = tow
+  obm_src_var    = OBM_TOW_SOURCE
+  obm_src_range  = 2000
+
+  // Publish to behaviors:
+  tow_out_var    = OBM_TOW_GUTS
+  tow_radius     = 4.0
+
+  // Optional viewer overlay:
+  post_tow_view  = false
+  tow_view_color = yellow
+}
+
 //--------------------------------------------------
 // pLogger Config Block
 

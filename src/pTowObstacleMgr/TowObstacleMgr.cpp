@@ -15,6 +15,9 @@
 #include "ConvexHullGenerator.h"
 #include "XYFormatUtilsPoint.h"
 #include "XYFormatUtilsPoly.h"
+#include "XYPolygon.h"
+#include <sstream>
+#include <cmath>
 
 using namespace std;
 
@@ -76,6 +79,15 @@ TowObstacleMgr::TowObstacleMgr()
   m_alerts_resolved = 0;
 
   m_alert_var = "";    // Initially no alerts will be posted
+
+  // --- Tow adapter defaults ---
+  m_src_var       = "OBM_TOW_SOURCE";  // OBM posts hull alerts here
+  m_out_var       = "OBM_TOW_GUTS";    // we publish grown hulls here
+  m_tow_radius    = 4.0;               // meters
+  m_src_range     = 2000.0;            // meters
+  m_src_name      = "tow";             // name= prefix in OBM request
+  m_post_tow_view = false;             // overlay grown hulls
+  m_tow_view_color= "yellow";
 }
 
 //---------------------------------------------------------
@@ -138,6 +150,10 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       handled = handleMailModEnableObstacle(sval, "expunge");
     else if((m_enable_var != "") && (key == m_enable_var))
       handled = handleMailModEnableObstacle(sval, "enable");
+
+    else if(key == m_src_var)  // polygons from ObstacleMgr
+      handled = handleMailObmAlert(sval);
+
     else if(key == "APPCAST_REQ") // handle by AppCastingMOOSApp
       handled = true;
 
@@ -245,6 +261,21 @@ bool TowObstacleMgr::OnStartUp()
     else if(param == "lasso")
       handled = setBooleanOnString(m_lasso, value);
 
+    else if(param == "tow_radius")
+      handled = setPosDoubleOnString(m_tow_radius, value);
+    else if(param == "tow_out_var")
+      handled = setNonWhiteVarOnString(m_out_var, value);
+    else if(param == "obm_src_var")
+      handled = setNonWhiteVarOnString(m_src_var, value);
+    else if(param == "obm_src_range")
+      handled = setPosDoubleOnString(m_src_range, value);
+    else if(param == "obm_src_name")
+      handled = setNonWhiteVarOnString(m_src_name, value);
+    else if(param == "post_tow_view")
+      handled = setBooleanOnString(m_post_tow_view, value);
+    else if(param == "tow_view_color")
+      handled = setColorOnString(m_tow_view_color, value);
+
     else if(param == "lasso_points") {
       handled = setUIntOnString(m_lasso_points, value);
       if(m_lasso_points < 3) {
@@ -269,6 +300,13 @@ bool TowObstacleMgr::OnStartUp()
   if(m_point_var == "")
     m_point_var = "TRACKED_FEATURE";
 
+  // Ask ObstacleMgr to feed hull alerts to us on m_src_var
+  std::string req = "name=" + m_src_name +
+                    ",update_var=" + m_src_var +
+                    ",alert_range=" + doubleToStringX(m_src_range,1);
+  Notify("OBM_ALERT_REQUEST", req);
+  reportEvent("OBM_ALERT_REQUEST=" + req);
+
   Notify("OBM_CONNECT", "true");
   reportEvent("OBM_CONNECT=true");
   
@@ -292,6 +330,8 @@ void TowObstacleMgr::registerVariables()
 
   Register("GIVEN_OBSTACLE",0);
   Register("OBM_ALERT_REQUEST",0);
+
+  Register(m_src_var, 0);
 
   // Register for any variables involved in the MailFlagSet
   vector<string> mflag_vars = m_mfset.getMailFlagKeys();
@@ -1124,7 +1164,49 @@ string TowObstacleMgr::expandMacros(string sdata) const
 
   return(sdata);
 }
-  
+
+bool TowObstacleMgr::handleMailObmAlert(std::string msg)
+{
+  // OBM alert example:
+  // name=tow_ob_42#,poly=pts={...},label=ob_42#,vsource=radar#,id=ob_42
+  // Extract the poly field using '#' as the record delimiter
+  std::string poly_seg = tokStringParse(msg, "poly", '#', '=');
+  if(poly_seg == "")
+    return(false);
+
+  // Build polygon from the poly field (handles "pts=...,label=..." format)
+  XYPolygon poly = string2Poly(poly_seg);
+  if(poly.size() < 3 || !poly.is_convex())
+    return(false);
+
+  // Grow by tow radius (Minkowski dilation) to cover tow body footprint
+  //if(m_tow_radius > 0)
+    //poly.grow_by(m_tow_radius);
+
+  // Optional: get a label (prefer the one embedded in the poly segment)
+  std::string label = tokStringParse(poly_seg, "label", ',', '=');
+  if(label == "")
+    label = tokStringParse(msg, "id", '#', '=');
+  if(label == "")
+    label = "tow_ob"; // fallback
+
+  poly.set_label(label);
+
+  // Optional viewer overlay of grown hull
+  if(m_post_tow_view) {
+    poly.set_color("edge", m_tow_view_color);
+    poly.set_color("fill", m_tow_view_color);
+    poly.set_transparency(0.10);
+    Notify("VIEW_POLYGON", poly.get_spec(5));
+  }
+
+  // Publish a plain poly spec for tow-aware behaviors
+  // Behaviors will collect these as a vector<string> of "poly=...,label=..."
+  std::string out = "poly=" + poly.get_spec_pts(5) + ",label=" + label;
+  Notify(m_out_var, out);
+
+  return(true);
+}
 
 //------------------------------------------------------------
 // Procedure: buildReport()

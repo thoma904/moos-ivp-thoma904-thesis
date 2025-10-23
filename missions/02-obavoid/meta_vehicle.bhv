@@ -145,7 +145,7 @@ Behavior = BHV_Towing
   condition     = Deploy = true
 
   // optional tweaks (defaults shown)
-  obstacle_var  = OBSTACLE_ALERT
+  obstacle_var  = OBM_TOW_GUTS
   peak_width    = 30
   base_width    = 180
   summit_delta  = 30

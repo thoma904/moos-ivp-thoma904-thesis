@@ -14,6 +14,7 @@
 #include "VarDataPair.h"
 #include "MailFlagSet.h"
 #include <set>
+#include <map>
 
 class TowObstacleMgr : public AppCastingMOOSApp
 {
@@ -69,6 +70,12 @@ class TowObstacleMgr : public AppCastingMOOSApp
   
   void onNewObstacle(std::string obs_type);
 
+  // ------------------------ NEW: Tow adapter handler ------------------------
+  // Handles a single polygon alert message from ObstacleMgr, grows by
+  // tow radius, and republishes on m_out_var for tow behaviors.
+  bool handleMailObmAlert(std::string msg);
+  // -------------------------------------------------------------------------
+
  private: // Configuration variables
 
   std::string  m_point_var;            // incoming points
@@ -110,6 +117,22 @@ class TowObstacleMgr : public AppCastingMOOSApp
   std::vector<VarDataPair> m_new_obs_flags;
 
   MailFlagSet m_mfset;
+
+  // ------------------------ NEW: Tow adapter config -------------------------
+  // Where we expect ObstacleMgr to post hull alerts to *this* app
+  std::string  m_src_var;        // default: "OBM_TOW_SOURCE"
+  // Where this app publishes tow-grown hulls for tow behaviors
+  std::string  m_out_var;        // default: "OBM_TOW_GUTS"
+  // How much to grow polygons to account for the tow body size/margin
+  double       m_tow_radius;     // default: 4.0 (meters)
+  // Range requested from ObstacleMgr in our OBM_ALERT_REQUEST
+  double       m_src_range;      // default: 2000 (meters)
+  // "name=" prefix used when requesting alerts from ObstacleMgr
+  std::string  m_src_name;       // default: "tow"
+  // Optional viewer overlay for the grown hulls
+  bool         m_post_tow_view;  // default: false
+  std::string  m_tow_view_color; // default: "yellow"
+  // --------------------------------------------------------------------------
 
  private: // State variables
   double m_nav_x;
