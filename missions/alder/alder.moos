@@ -20,7 +20,7 @@ ProcessConfig = ANTLER
   Run = pMarineViewer	@ NewConsole = false
   Run = uProcessWatch @ NewConsole = false
   Run = pHelmIvP      @ NewConsole = false
-  //Run = pOdometry     @ NewConsole = false
+  Run = pTowing     @ NewConsole = false
 }
 
 //------------------------------------------
@@ -149,4 +149,15 @@ ProcessConfig = pNodeReporter
   CommsTick	= 2
 
   vessel_type = kayak
+}
+
+//------------------------------------------
+// pNodeReporter config block
+
+ProcessConfig = pTowing
+{
+  AppTick	  = 2
+  CommsTick	= 2
+
+  cable_length = 20
 }
