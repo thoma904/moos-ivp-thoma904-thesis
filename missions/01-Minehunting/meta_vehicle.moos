@@ -17,7 +17,6 @@ ProcessConfig = ANTLER
   Run = pHelmIvP           @ NewConsole = false
   Run = pHostInfo          @ NewConsole = false
   Run = uFldNodeBroker     @ NewConsole = false
-  Run = pDeadManPost       @ NewConsole = false
   Run = pRealm             @ NewConsole = false
   Run = uFldMessageHandler @ NewConsole = false
   Run = uProcessWatch      @ NewConsole = false
@@ -54,7 +53,7 @@ ProcessConfig = pHelmIvP
   CommsTick  = 4
 
   behaviors    = targ_$(VNAME).bhv
-  verbose      = false
+  verbose      = true
   domain       = course:0:359:360
   domain       = speed:0:2.0:21
 }
@@ -70,22 +69,6 @@ ProcessConfig = pNodeReporter
   vessel_type = kayak
 }
 
-//---------------------------------------
-// pDeadManPost Config Block
-
-ProcessConfig = pDeadManPost
-{
-  AppTick   = 4
-  CommsTick = 4
-
-  heartbeat_var   = HEARTBEAT
-  max_noheart     = 15
-  post_policy     = reset
-  active_at_start = false
-  deadflag        = DEPLOY = false
-}
-
-	
 //----------------------------------------
 // uFldMessageHandler Config Block
 	

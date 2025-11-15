@@ -4,6 +4,12 @@
 initialize   DEPLOY = false
 initialize   RETURN = false
 initialize   STATION_KEEP = false
+initialize   WILLIAMSON = false
+initialize   TURNING = false
+initialize   PREV_WPT_X = 0
+initialize   PREV_WPT_Y = 0
+initialize   NEXT_WPT_X = 0
+initialize   NEXT_WPT_Y = 0
 
 set MODE = ACTIVE {
   DEPLOY = true
@@ -25,7 +31,8 @@ Behavior = BHV_Waypoint
 {
   name      = waypt_survey
   pwt       = 100
-  condition = MODE==TRAVERSING
+  condition = MODE==TRAVERSING 
+  condition = TURNING = false
   endflag   = RETURN = true
 
   updates   = WPT_UPDATE
@@ -41,21 +48,14 @@ Behavior = BHV_Waypoint
          slip_radius = 10
 	efficiency_measure = all
 
-	// Bigger home plate
-  // polygon = pts={-17,-26:52,1:69,-40:41,-67:1,-68} 
+              points = format=lawnmower, x=0, y=-60, height=60, width=100, lane_width=15
 
-
-	// Smaller home plate zones
-#ifdef ZONE east
-         polygon = pts={38,-37:64,-32:77,-16:59,11:23,-3}
-#elseifdef ZONE west
-         polygon = pts={-18,-30:-9,-57:16,-55:30,-42:12,-14}
-#else
-         polygon = pts={-2,-21:44,-2:56,-29:37,-48:10,-49}
-           order = reverse
-#endif
+              wptflag = PREV_WPT_X = $[X]
+              wptflag = PREV_WPT_Y = $[Y]
+              wptflag = NEXT_WPT_X = $[NX]
+              wptflag = NEXT_WPT_Y = $[NY]
 	
-          repeat = 3
+              repeat = forever
 
     visual_hints = nextpt_color=yellow
     visual_hints = nextpt_vertex_size=8
@@ -63,6 +63,34 @@ Behavior = BHV_Waypoint
     visual_hints = vertex_color=dodger_blue, edge_color=white
     visual_hints = vertex_size=5, edge_size=1
 }
+
+//----------------------------------------------
+Behavior=BHV_Williamson
+{
+  name       = williamson
+  pwt        = 100
+  perpetual  = true
+  condition  = MODE==TRAVERSING
+  condition  = WILLIAMSON = true
+
+  runflag    = TURNING = true
+
+  endflag    = TURNING = false
+  endflag    = WILLIAMSON = false
+}
+
+//----------------------------------------------
+Behavior=BHV_ConstantSpeed
+{
+  name       = turn_speed
+  pwt        = 100
+  perpetual  = true
+  condition  = MODE==TRAVERSING
+  condition  = WILLIAMSON = true
+
+  speed = 1
+}
+
 
 //----------------------------------------------
 Behavior=BHV_Waypoint
