@@ -20,7 +20,8 @@ ProcessConfig = ANTLER
   Run = pRealm             @ NewConsole = false
   Run = uFldMessageHandler @ NewConsole = false
   Run = uProcessWatch      @ NewConsole = false
-	Run = pTowing            @ NewConsole = false  
+	Run = pTowing            @ NewConsole = false
+  Run = pTowTurnMgr        @ NewConsole = false  
 	
 #ifdef XMODE SIM
   Run = uSimMarineV22      @ NewConsole = false
@@ -133,7 +134,7 @@ ProcessConfig = pMarinePIDV22
 }
 
 //------------------------------------------
-// pNodeReporter config block
+// pTowing config block
 
 ProcessConfig = pTowing
 {
@@ -141,4 +142,13 @@ ProcessConfig = pTowing
   CommsTick	= 2
 
   cable_length = 20
+}
+
+//------------------------------------------
+// pTowTurnMgr config block
+
+ProcessConfig = pTowTurnMgr
+{
+  AppTick	  = 10
+  CommsTick	= 10
 }
