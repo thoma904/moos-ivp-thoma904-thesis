@@ -13,6 +13,7 @@ ADD_EXECUTABLE(pTowTurnMgr ${SRC})
 
 TARGET_LINK_LIBRARIES(pTowTurnMgr
    ${MOOS_LIBRARIES}
+   geometry
    apputil
    mbutil
    m

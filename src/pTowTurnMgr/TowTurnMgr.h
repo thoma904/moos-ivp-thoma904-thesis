@@ -29,8 +29,28 @@ class TowTurnMgr : public AppCastingMOOSApp
    void registerVariables();
 
  private: // Configuration variables
+    double m_cable_length;
 
  private: // State variables
+    double m_nav_x;
+    double m_nav_y;
+    double m_nav_heading;
+    double m_nav_speed;
+    double m_towed_x;
+    double m_towed_y;
+    double m_prev_x;
+    double m_prev_y;
+    double m_next_x;
+    double m_next_y;
+    bool   m_tow_deployed;
+    double m_leg_length;
+    double m_dist_end;
+    double m_turn_factor;
+    double m_wpt_index;
+    bool m_turn_active;
+    std::string m_turn_dir;
+    bool m_posted_direction;
+    int m_next_turn_dir;
 };
 
 #endif 
