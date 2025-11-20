@@ -62,3 +62,35 @@ TARGET_LINK_LIBRARIES(BHV_Towing
    mbutil 
    geometry 
    ${SYSTEM_LIBS} )
+
+#--------------------------------------------------------
+#                                      BHV_Williamson
+#--------------------------------------------------------
+ADD_LIBRARY(BHV_Williamson SHARED 
+   BHV_Williamson.cpp)
+TARGET_LINK_LIBRARIES(BHV_Williamson
+   helmivp
+   behaviors 
+   ivpbuild 
+   logic 
+   ivpcore 
+   bhvutil 
+   mbutil 
+   geometry 
+   ${SYSTEM_LIBS} )
+
+#--------------------------------------------------------
+#                                      BHV_TowedTurn
+#--------------------------------------------------------
+ADD_LIBRARY(BHV_TowedTurn SHARED 
+   BHV_TowedTurn.cpp)
+TARGET_LINK_LIBRARIES(BHV_TowedTurn
+   helmivp
+   behaviors 
+   ivpbuild 
+   logic 
+   ivpcore 
+   bhvutil 
+   mbutil 
+   geometry 
+   ${SYSTEM_LIBS} )
