@@ -4,8 +4,7 @@
 initialize   DEPLOY = false
 initialize   RETURN = false
 initialize   STATION_KEEP = false
-initialize   WILLIAMSON = false
-initialize   TURNING = false
+initialize   TURN_ACTIVE = false
 initialize   PREV_WPT_X = 0
 initialize   PREV_WPT_Y = 0
 initialize   NEXT_WPT_X = 0
@@ -32,7 +31,7 @@ Behavior = BHV_Waypoint
   name      = waypt_survey
   pwt       = 100
   condition = MODE==TRAVERSING 
-  condition = TURNING = false
+  condition = TURN_ACTIVE = false
   endflag   = RETURN = true
 
   updates   = WPT_UPDATE
@@ -65,18 +64,21 @@ Behavior = BHV_Waypoint
 }
 
 //----------------------------------------------
-Behavior=BHV_Williamson
+Behavior=BHV_TowedTurn
 {
-  name       = williamson
+  name       = tow_turn
   pwt        = 100
   perpetual  = true
   condition  = MODE==TRAVERSING
-  condition  = WILLIAMSON = true
+  condition  = TURN_ACTIVE = true
 
-  runflag    = TURNING = true
+  // These can also be set via updates from pTowTurnMgr:
+  turn_dir = 1
 
-  endflag    = TURNING = false
-  endflag    = WILLIAMSON = false
+  // Example: let pTowTurnMgr update params at runtime
+  updates = TOW_TURN_PARAMS
+
+  endflag = TURN_ACTIVE=false
 }
 
 //----------------------------------------------
@@ -86,7 +88,7 @@ Behavior=BHV_ConstantSpeed
   pwt        = 100
   perpetual  = true
   condition  = MODE==TRAVERSING
-  condition  = WILLIAMSON = true
+  condition  = TURN_ACTIVE = true
 
   speed = 1
 }
