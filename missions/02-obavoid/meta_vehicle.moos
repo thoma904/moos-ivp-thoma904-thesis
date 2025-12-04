@@ -25,9 +25,9 @@ Processconfig = ANTLER
   Run = uFldNodeBroker @ NewConsole = false
   Run = uLoadWatch     @ NewConsole = false
   Run = pObstacleMgr   @ NewConsole = false
-  Run = pTowObstacleMgr @ NewConsole = false
+  //Run = pTowObstacleMgr @ NewConsole = false
   Run = pTowing        @ NewConsole = false
-  Run = pTowing_Circle @ NewConsole = false
+  //Run = pTowing_Circle @ NewConsole = false
 }
 
 #include plugs.moos <pShare>
@@ -170,24 +170,24 @@ ProcessConfig = pObstacleMgr
 	
 } 
 
-ProcessConfig = pTowObstacleMgr
-{
-  AppTick   = 5
-  CommsTick = 5
+//ProcessConfig = pTowObstacleMgr
+//{
+  //AppTick   = 5
+  //CommsTick = 5
 
   // Request from OBM:
-  obm_src_name   = tow
-  obm_src_var    = OBM_TOW_SOURCE
-  obm_src_range  = 2000
+  //obm_src_name   = tow
+  //obm_src_var    = OBM_TOW_SOURCE
+  //obm_src_range  = 2000
 
   // Publish to behaviors:
-  tow_out_var    = OBM_TOW_GUTS
-  tow_radius     = 4.0
+  //tow_out_var    = OBM_TOW_GUTS
+  //tow_radius     = 4.0
 
   // Optional viewer overlay:
-  post_tow_view  = false
-  tow_view_color = yellow
-}
+  //post_tow_view  = false
+  //tow_view_color = yellow
+//}
 
 //--------------------------------------------------
 // pLogger Config Block
@@ -242,14 +242,14 @@ ProcessConfig = pTowing
   AppTick	  = 20
   CommsTick	= 20
 
-  cable_length = 20
+  cable_length = 100
 }
 
 //------------------------------------------
 // pTowing_Area config block
 
-ProcessConfig = pTowing_Circle
-{
-  AppTick	  = 20
-  CommsTick	= 20
-}
+//ProcessConfig = pTowing_Circle
+//{
+  //AppTick	  = 20
+  //CommsTick	= 20
+//}
