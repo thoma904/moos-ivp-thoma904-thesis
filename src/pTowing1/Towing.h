@@ -51,6 +51,9 @@ class Towing : public AppCastingMOOSApp
  double m_nav_speed; // Vessel speed
  double m_nav_vx; // Vessel velocity in x direction
  double m_nav_vy; // Vessel velocity in y direction
+ double m_attach_offset;   // distance from NAV_ reference to tow hook [m]
+ double m_anchor_x;        // world x of tow hook
+ double m_anchor_y;        // world y of tow hook
 };
 
 #endif 

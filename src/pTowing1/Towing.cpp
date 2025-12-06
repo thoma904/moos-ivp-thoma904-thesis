@@ -35,6 +35,9 @@ Towing::Towing()
   m_nav_speed = 0; // Initialize vessel speed
   m_nav_vx = 0; // Initialize vessel velocity in x direction
   m_nav_vy = 0; // Initialize vessel velocity in y direction
+  m_attach_offset = 0;   // distance from NAV_ reference to tow hook [m]
+  m_anchor_x = 0;        // world x of tow hook
+  m_anchor_y = 0;        // world y of tow hook
 }
 
 //---------------------------------------------------------
@@ -104,22 +107,26 @@ bool Towing::Iterate()
 
   //Establish time increment
   double now = MOOSTime();
-  if(m_prev_time == 0) {
+  if(m_prev_time == 0) 
+  {
     m_prev_time = now; // Initialize on first call
   }
   double dt = std::max(1e-3, now - m_prev_time); // Time since last iteration
   m_prev_time = now; // Update previous time
 
   // Decompose Towing vessel's speed into x and y components
-  // Assuming heading is in degrees, convert to radians for calculations
-  // Assuming MOOS heading: 0° = North, 90° = East; x is East, y is North.
-  double hdg_rad = (90.0 - m_nav_heading) * M_PI / 180.0;
+  // MOOS heading: 0° = North, 90° = East; x is East, y is North.
+  double hdg_rad = (90.0 - m_nav_heading) * M_PI / 180.0; // Convert to radians for calculations
   m_nav_vx = m_nav_speed * cos(hdg_rad);
   m_nav_vy = m_nav_speed * sin(hdg_rad);
 
+  // Compute the position of the tow hook
+  m_anchor_x = m_nav_x - m_attach_offset * cos(hdg_rad);
+  m_anchor_y = m_nav_y - m_attach_offset * sin(hdg_rad);
 
   // On first position update, store starting point
-  if(m_towing_position.size() == 0) {
+  if(m_towing_position.size() == 0) 
+  {
     m_start_x = m_nav_x;
     m_start_y = m_nav_y;
     m_towed_x = m_nav_x;  // initialize towed body here too
@@ -136,7 +143,7 @@ bool Towing::Iterate()
   // 3. Compute distance from start
   double dx0 = m_nav_x - m_start_x;
   double dy0 = m_nav_y - m_start_y;
-  double dist_from_start = hypot(dx0, dy0);
+  double dist_from_start = hypot(dx0, dy0) - m_attach_offset;
 
   if(!m_deployed)
   {
@@ -162,36 +169,23 @@ bool Towing::Iterate()
     // -----------------------
     // Spring-Pull Tow Model
     // -----------------------
-    double dx = m_nav_x - m_towed_x;
-    double dy = m_nav_y - m_towed_y;
-    double distance = hypot(dx, dy); // Current distance between vessel and towed body
+    double dx = m_anchor_x - m_towed_x;
+    double dy = m_anchor_y - m_towed_y;
+    double distance = hypot(dx, dy); // Current distance between anchor point and towed body
     m_cable_distance = distance; // Store for troubleshooting
 
     if(distance > 0.01) //avoid division by zero
     {
-
-      // Build a point L behind the boat along current heading
-      double ax = m_nav_x, ay = m_nav_y;
-      if (m_nav_speed > 0.1) // Filter out extreme low speed/stopped cases
-      {  
-        ax = m_nav_x - m_cable_length * cos(hdg_rad);
-        ay = m_nav_y - m_cable_length * sin(hdg_rad);
-      }
-
-      double dx_dir = ax - m_towed_x;
-      double dy_dir = ay - m_towed_y;
+      double dx_dir = m_anchor_x - m_towed_x;
+      double dy_dir = m_anchor_y - m_towed_y;
       double d_dir  = hypot(dx_dir, dy_dir);
-      if (d_dir < 1e-6) 
+      if (d_dir < 1e-6)
         d_dir = 1.0;
 
-      // Normalize the vector from towed body to vessel
-      // to get unit vector in the direction of the cable
-      double ux = dx_dir / d_dir;          // unit vector x
-      double uy = dy_dir / d_dir;          // unit vector y
-
-      // Calculate tangential unit vector (perpendicular to cable)
-      double nx = -uy; // unit vector normal x
-      double ny = ux; // unit vector normal y
+      double ux = dx_dir / d_dir;    // unit vector along cable
+      double uy = dy_dir / d_dir;
+      double nx = -uy;               // tangential unit vector
+      double ny = ux;
 
       // --- Spring (only pull) ---
       if(distance > m_cable_length) 
@@ -226,31 +220,37 @@ bool Towing::Iterate()
 
       // --- Rigid cable clamp ---
       // Forces the towed body to stay within the cable length
-      double dist2 = hypot(m_nav_x - m_towed_x, m_nav_y - m_towed_y);
-      if(dist2 > m_cable_length) 
+
+     double sx = m_anchor_x - m_towed_x;
+     double sy = m_anchor_y - m_towed_y;
+     double dist2 = hypot(sx, sy);
+
+     if(dist2 > m_cable_length) 
+     {
+      double sc = m_cable_length / dist2;
+
+      // Project to circle of radius cable_length around anchor
+      m_towed_x = m_anchor_x - sx * sc;
+      m_towed_y = m_anchor_y - sy * sc;
+
+      // Remove outward radial velocity relative to anchor
+      double urx = sx / dist2;
+      double ury = sy / dist2;
+      double vrad = m_towed_vx * urx + m_towed_vy * ury;
+      if(vrad < 0) 
       {
-        double sx = m_nav_x - m_towed_x;
-        double sy = m_nav_y - m_towed_y;
-        double sc = m_cable_length / dist2;
-        m_towed_x = m_nav_x - sx * sc;
-        m_towed_y = m_nav_y - sy * sc;
-        // Remove outward radial velocity so it doesn't re‑stretch immediately
-        double urx = sx / dist2, ury = sy / dist2;
-        double vrad = m_towed_vx*urx + m_towed_vy*ury;
-        if(vrad < 0) 
-        { // only if pointing outward
-          m_towed_vx -= vrad * urx;
-          m_towed_vy -= vrad * ury;
-        }
+        m_towed_vx -= vrad * urx;
+        m_towed_vy -= vrad * ury;
       }
+     }
     }
   }
 
   // -----------------------
   // Publish heading
   // -----------------------
-  double dx = m_nav_x - m_towed_x;
-  double dy = m_nav_y - m_towed_y;
+  double dx = m_anchor_x - m_towed_x;
+  double dy = m_anchor_y - m_towed_y;
   double tow_heading = relAng(0, 0, dx, dy);  // degrees
 
   // -----------------------
@@ -274,8 +274,8 @@ bool Towing::Iterate()
   Notify("VIEW_POINT", body_str);
 
   // VIEW_SEGLIST for cable
-  string cable_str = "pts={" + doubleToStringX(m_nav_x,1) + "," +
-                              doubleToStringX(m_nav_y,1) + ":" +
+  string cable_str = "pts={" + doubleToStringX(m_anchor_x,1) + "," +
+                              doubleToStringX(m_anchor_y,1) + ":" +
                               doubleToStringX(m_towed_x,1) + "," +
                               doubleToStringX(m_towed_y,1) + "}";
   cable_str += ",label=TOW_LINE";
@@ -283,7 +283,7 @@ bool Towing::Iterate()
   Notify("VIEW_SEGLIST", cable_str);
 
   // -----------------------
-  // Publish NODE_REPORT_LOCAL for the towed body (acts like a node)
+  // Publish NODE_REPORT_LOCAL for the towed body (acts like a vessel)
   // -----------------------
 
   // Prefer heading from tow velocity; fallback to cable bearing if nearly stopped
@@ -337,6 +337,12 @@ bool Towing::OnStartUp()
       handled = true;
     }
 
+    else if(param == "attach_offset") 
+    {
+      m_attach_offset = stod(value);
+      handled = true;
+    }
+
     if(!handled)
       reportUnhandledConfigWarning(orig);
 
@@ -376,6 +382,9 @@ bool Towing::buildReport()
   m_msgs << " CABLE_LENGTH: " << m_cable_length << endl;
   m_msgs << " CABLE_DISTANCE: " << m_cable_distance << endl;
   m_msgs << " Deployed: " << (m_deployed ? "true" : "false") << endl;
+  m_msgs << " TOW_VX: " << m_towed_vx << endl;
+  m_msgs << " TOW_VY: " << m_towed_vy << endl;
+  m_msgs << " ATTACH_OFFSET: " << m_attach_offset << endl;
 
   return(true);
 }
