@@ -40,7 +40,7 @@ BHV_TowedTurn::BHV_TowedTurn(IvPDomain domain) :
   m_phase1_hdg = 0;
 
   // Add any variables this behavior needs to subscribe for
-  addInfoVars("NAV_HEADING, NAV_SPEED, NAV_X, NAV_Y");
+  addInfoVars("NAV_HEADING, NAV_SPEED, NAV_X, NAV_Y, TOW_PAST_WPT");
 }
 
 //---------------------------------------------------------------
@@ -147,7 +147,8 @@ IvPFunction* BHV_TowedTurn::onRunState()
     return(0);  // No influence if we don't know heading yet
 
   // 2) On first run: latch entry heading, phase-1 heading, and target heading
-  if(!m_entry_hdg_set) {
+  if(!m_entry_hdg_set) 
+  {
     m_entry_hdg = angle360(nav_hdg);
 
     // Overall plan:
@@ -161,38 +162,53 @@ IvPFunction* BHV_TowedTurn::onRunState()
     m_entry_hdg_set = true;
   }
 
-  double course_des = nav_hdg;
+  //3) Check if tow is past the waypoint
+  bool  ok_tow_flag   = false;
+  double tow_flag_val = getBufferDoubleVal("TOW_PAST_WPT", ok_tow_flag);
 
-  double turned = fabs(angleDiff(nav_hdg, m_entry_hdg));
+  // Interpret any non-zero as "true"
+  bool tow_past_wpt = ok_tow_flag && (tow_flag_val > 0.5);
 
-  // 3) Phase 1: drive to H0 + 60 deg (starboard)
-  if(!m_phase1_done) 
+  double course_des;
+
+  if(!tow_past_wpt)
+    course_des = m_entry_hdg; // Hold entry heading until tow is past waypoint
+  
+
+  //4) Conduct Teardrop turn if tow is past waypoint
+  else
   {
-    course_des = m_phase1_hdg;
+    double turned = fabs(angleDiff(nav_hdg, m_entry_hdg));
 
-    if(turned >= 45)
-      m_phase1_done = true;
-  }
+    // 3) Phase 1: drive to H0 + 45 deg (starboard)
+    if(!m_phase1_done) 
+    {
+      course_des = m_phase1_hdg;
 
-  else {
-    // CCW (port) angular distance from current to target
-    // (current - target) wrapped into [0,360) is the CCW amount
-    double diff_port = angle360(nav_hdg - m_target_hdg);  // [0,360)
-    double diff_star = angle360(m_target_hdg - nav_hdg);  // [0,360)
-
-    double diff_dir = (m_turn_dir > 0) ? diff_star : diff_port;
-
-    const double tol_final = 10.0;     // deg
-    if(diff_dir < tol_final) {        // close enough to the target
-      setComplete();
-      return(0);
+      if(turned >= 45)
+        m_phase1_done = true;
     }
 
-    double max_step = 60;            // deg per decision
-    double step     = std::min(diff_dir, max_step);
+    else {
+      // CCW (port) angular distance from current to target
+      // (current - target) wrapped into [0,360) is the CCW amount
+      double diff_port = angle360(nav_hdg - m_target_hdg);  // [0,360)
+      double diff_star = angle360(m_target_hdg - nav_hdg);  // [0,360)
 
-    // PORT turn: decrease heading
-    course_des = angle360(nav_hdg + m_turn_dir * step);
+      double diff_dir = (m_turn_dir > 0) ? diff_star : diff_port;
+
+      const double tol_final = 10.0;     // deg
+      if(diff_dir < tol_final) {        // close enough to the target
+        setComplete();
+        return(0);
+      }
+
+      double max_step = 60;            // deg per decision
+      double step     = std::min(diff_dir, max_step);
+
+      // PORT turn: decrease heading
+      course_des = angle360(nav_hdg + m_turn_dir * step);
+    }
   }
 
   // 5) Build IvP function preferring the desired course
