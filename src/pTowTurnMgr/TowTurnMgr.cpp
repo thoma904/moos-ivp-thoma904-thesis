@@ -30,7 +30,7 @@ TowTurnMgr::TowTurnMgr()
   m_next_x = 0;
   m_next_y = 0;
   m_tow_deployed = false;
-  m_cable_length = 0;
+  m_cable_length = 30;
   m_leg_length = 0;
   m_dist_end = 0;
   m_turn_factor = 1;
@@ -146,6 +146,25 @@ bool TowTurnMgr::Iterate()
     double dx = m_next_x - m_prev_x;
     double dy = m_next_y - m_prev_y;
     m_leg_length = hypot(dx, dy);
+
+    // --- NEW: is the TOW past the waypoint? ---
+    bool tow_past_wpt = false;
+    if(m_leg_length > 0) 
+    {
+      // Unit vector along the leg
+      double ux = dx / m_leg_length;
+      double uy = dy / m_leg_length;
+
+      // Along-track distance of the tow, measured from m_prev
+      double tow_along = (m_towed_x - m_prev_x)*ux + (m_towed_y - m_prev_y)*uy;
+
+      // Optionally add a margin (e.g. +5.0) if you want "past" to be
+      // "5 meters past"
+      double margin = 0.0; 
+      tow_past_wpt = (tow_along > m_leg_length + margin);
+    }
+
+    Notify("TOW_PAST_WPT", tow_past_wpt ? "1" : "0");
 
     double dist_to_end = hypot(m_next_x - m_nav_x, m_next_y - m_nav_y);
     m_dist_end = dist_to_end;
