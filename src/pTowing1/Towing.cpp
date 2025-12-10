@@ -288,6 +288,7 @@ bool Towing::Iterate()
 
   // Prefer heading from tow velocity; fallback to cable bearing if nearly stopped
   double tow_speed = hypot(m_towed_vx, m_towed_vy);
+  Notify("TOWED_SPEED", tow_speed);
   double tow_hdg_vel = (tow_speed > 0.05) ? relAng(0, 0, m_towed_vx, m_towed_vy) : tow_heading;  // fall back to cable direction
 
   std::ostringstream tow_nr;
