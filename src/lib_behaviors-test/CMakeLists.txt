@@ -94,3 +94,19 @@ TARGET_LINK_LIBRARIES(BHV_TowedTurn
    mbutil 
    geometry 
    ${SYSTEM_LIBS} )
+
+#--------------------------------------------------------
+#                                      BHV_TowedSafety
+#--------------------------------------------------------
+ADD_LIBRARY(BHV_TowedSafety SHARED 
+   BHV_TowedSafety.cpp)
+TARGET_LINK_LIBRARIES(BHV_TowedSafety
+   helmivp
+   behaviors 
+   ivpbuild 
+   logic 
+   ivpcore 
+   bhvutil 
+   mbutil 
+   geometry 
+   ${SYSTEM_LIBS} )
