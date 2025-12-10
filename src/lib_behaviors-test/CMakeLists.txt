@@ -98,9 +98,9 @@ TARGET_LINK_LIBRARIES(BHV_TowedTurn
 #--------------------------------------------------------
 #                                      BHV_TowedSafety
 #--------------------------------------------------------
-ADD_LIBRARY(BHV_TowedSafety SHARED 
-   BHV_TowedSafety.cpp)
-TARGET_LINK_LIBRARIES(BHV_TowedSafety
+ADD_LIBRARY(BHV_TowSafety SHARED 
+   BHV_TowSafety.cpp)
+TARGET_LINK_LIBRARIES(BHV_TowSafety
    helmivp
    behaviors 
    ivpbuild 
