@@ -137,4 +137,20 @@ Behavior = BHV_StationKeep
         visual_hints = vertex_size=0, edge_color=gray50
 }
 
+//----------------------------------------------
+Behavior = BHV_TowSafety
+{
+  // General Behavior Parameters
+  // ---------------------------
+  name = tow_safety // default
+  pwt = 100 // default
+  condition  = MODE==TRAVERSING
+  condition  = TURN_ACTIVE = false
+  updates = TOW_SAFETY_UPDATES // example
 
+  // Parameters specific to this behavior
+  // ------------------------------------
+  memory_time = 15 // example (seconds)
+  turn_range = 135 // example (degrees)
+  min_tow_speed = .5 // example (m/s)
+}
