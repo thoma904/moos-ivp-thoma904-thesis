@@ -34,6 +34,8 @@
 #include "AngleUtils.h"
 #include "GeomUtils.h"
 #include "BuildUtils.h"
+#include "ZAIC_HEQ.h"
+#include "OF_Coupler.h"
 
 
 #ifndef M_PI
@@ -51,12 +53,13 @@ BHV_TowSafety::BHV_TowSafety(IvPDomain gdomain) :
 {
   m_descriptor = "tow_safety";
 
-  m_domain = subDomain(m_domain, "course");
+  m_domain = subDomain(m_domain, "course,speed");
 
   m_memory_time = -1;
   m_turn_range  = -1;
+  m_min_tow_speed = -1;
 
-  addInfoVars("NAV_HEADING, NAV_SPEED");
+  addInfoVars("NAV_HEADING, NAV_SPEED, TOWED_SPEED");
 }
 
 //-----------------------------------------------------------
@@ -85,6 +88,15 @@ bool BHV_TowSafety::setParam(string param, string val)
     m_turn_range = dval;
     return(true);
   }
+
+  else if(param == "min_tow_speed") {
+    double dval = atof(val.c_str());
+    if((dval < 0) || (!isNumber(val)))
+      return(false);
+    m_min_tow_speed = dval;
+    return(true);
+  }
+
   return(false);
 }
 
@@ -102,11 +114,15 @@ IvPFunction *BHV_TowSafety::onRunState()
     postWMessage("Variable turn_range not specified");
     return(0);
   }
-    
+  if(m_min_tow_speed < 0) {
+    postWMessage("Variable min_tow_speed not specified");
+    return(0);
+  }
 
-  bool ok,ok2;
+  bool ok,ok2,ok3;
   double heading = getBufferDoubleVal("NAV_HEADING", ok);
   double speed   = getBufferDoubleVal("NAV_SPEED", ok2); //dpe
+  double towed_speed = getBufferDoubleVal("TOWED_SPEED", ok3);
 
   if(!ok) {
     postEMessage("No Ownship NAV_HEADING in info_buffer");
@@ -117,7 +133,12 @@ IvPFunction *BHV_TowSafety::onRunState()
     postEMessage("No Ownship NAV_SPEED in info_buffer");     //dpe
     return(0);                                               //dpe 
   }
- 
+
+  if(!ok3) {
+    postEMessage("No Ownship TOWED_SPEED in info_buffer");
+    return(0);
+  }
+
   double currtime = getBufferCurrTime();
   
   addHeading(heading, currtime);
@@ -136,18 +157,52 @@ IvPFunction *BHV_TowSafety::onRunState()
 
     // Min. width added by HS 020409
     double ref_speed = 1.5;
-    double min_speed = 0.3;
+    double min_speed = m_min_tow_speed;
     double pk_width;
-    if (speed < min_speed)
+    if (towed_speed < min_speed)
       pk_width = m_turn_range*min_speed/ref_speed;
-    else if (speed < ref_speed)
-      pk_width = m_turn_range*speed/ref_speed;
+    else if (towed_speed < ref_speed)
+      pk_width = m_turn_range*towed_speed/ref_speed;
     else
       pk_width = m_turn_range;
 
     crs_zaic.setPeakWidth(pk_width);
 
-  IvPFunction *ipf = crs_zaic.extractIvPFunction();
+  IvPFunction *crs_ipf = crs_zaic.extractIvPFunction();
+
+  ZAIC_HEQ spd_zaic(m_domain, "speed");
+
+  // Get speed domain limits so we can safely push to max
+  double dom_spd_min = m_domain.getVarLow("speed");
+  double dom_spd_max = m_domain.getVarHigh("speed");
+
+  double summit_speed;
+
+  if (towed_speed < m_min_tow_speed) {
+    // Tow is too slow: push commanded vessel speed toward max
+    summit_speed = dom_spd_max;
+  }
+  else 
+  {
+    // Tow is at or above min: prefer running near the minimum safe tow speed
+    // (you could use a separate nominal speed here if you want)
+    summit_speed = m_min_tow_speed;
+  }
+
+  // Clamp to domain, just in case
+  if (summit_speed < dom_spd_min)
+    summit_speed = dom_spd_min;
+  if (summit_speed > dom_spd_max)
+    summit_speed = dom_spd_max;
+
+  spd_zaic.setSummit(summit_speed);
+  spd_zaic.setMinMaxUtil(0, 100);
+  spd_zaic.setBaseWidth(2.0);
+
+  IvPFunction *spd_ipf = spd_zaic.extractIvPFunction();
+
+  OF_Coupler coupler;
+  IvPFunction *ipf = coupler.couple(crs_ipf, spd_ipf, 50, 50);
 
   if(ipf)
     ipf->setPWT(m_priority_wt);
@@ -268,15 +323,3 @@ bool BHV_TowSafety::getHeadingAvg2(double& heading_avg)
 
   return(true);
 }
-
-
-
-
-
-
-
-
-
-
-
-

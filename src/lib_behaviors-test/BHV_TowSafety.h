@@ -45,7 +45,7 @@ private: // Configuration Parameters
 
   double m_memory_time;
   double m_turn_range;
-
+  double m_min_tow_speed;
 
 private: // State Variables
 
@@ -53,5 +53,13 @@ private: // State Variables
   std::list<double> m_heading_time;
 
 };
+
+#define IVP_EXPORT_FUNCTION
+
+extern "C" {
+  IVP_EXPORT_FUNCTION IvPBehavior * createBehavior(std::string name, IvPDomain domain) 
+  {return new BHV_TowSafety(domain);}
+}
 #endif
+
 
