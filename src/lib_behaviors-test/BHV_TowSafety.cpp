@@ -153,20 +153,44 @@ IvPFunction *BHV_TowSafety::onRunState()
   ZAIC_PEAK crs_zaic(m_domain, "course");
   crs_zaic.setSummit(heading_avg);
   crs_zaic.setValueWrap(true);
-    crs_zaic.setSummitDelta(0.2);
+  crs_zaic.setSummitDelta(0.2);
 
-    // Min. width added by HS 020409
-    double ref_speed = 1.5;
-    double min_speed = m_min_tow_speed;
+    // --- Turn width based on TOWED_SPEED and min_tow_speed ---
+
+    // ref_tow_speed: where we allow full turn_range.
+    // You can tune this, but starting with (min + 0.7) is reasonable.
+    double ref_tow_speed = m_min_tow_speed + 0.7;
+
+    // Smallest heading band we ever allow (deg) when tow is too slow
+    double min_pk_width = 5.0;
+
     double pk_width;
-    if (towed_speed < min_speed)
-      pk_width = m_turn_range*min_speed/ref_speed;
-    else if (towed_speed < ref_speed)
-      pk_width = m_turn_range*towed_speed/ref_speed;
-    else
+
+    if (towed_speed <= m_min_tow_speed) {
+      // Tow is at or below minimum safe speed:
+      // essentially "hold heading", don't keep carving the turn.
+      pk_width = min_pk_width;
+    }
+    else if (towed_speed >= ref_tow_speed) {
+      // Tow is nice and fast: allow full turn_range
       pk_width = m_turn_range;
+    }
+    else {
+      // Between min_tow_speed and ref_tow_speed:
+      // scale pk_width smoothly between min_pk_width and m_turn_range
+      double frac = (towed_speed - m_min_tow_speed) /
+                    (ref_tow_speed - m_min_tow_speed);
+      if (frac < 0.0) frac = 0.0;
+      if (frac > 1.0) frac = 1.0;
+
+      pk_width = min_pk_width + frac * (m_turn_range - min_pk_width);
+    }
 
     crs_zaic.setPeakWidth(pk_width);
+    crs_zaic.setMinMaxUtil(0, 100);          // explicit util range
+    crs_zaic.setBaseWidth(pk_width + 20.0);  // gentle tails outside the peak
+    crs_zaic.setSummitDelta(0.0);           // flat-ish top near heading_avg
+
 
   IvPFunction *crs_ipf = crs_zaic.extractIvPFunction();
 
@@ -178,22 +202,25 @@ IvPFunction *BHV_TowSafety::onRunState()
 
   double summit_speed;
 
-  if (towed_speed < m_min_tow_speed) {
-    // Tow is too slow: push commanded vessel speed toward max
-    summit_speed = dom_spd_max;
-  }
-  else 
-  {
-    // Tow is at or above min: prefer running near the minimum safe tow speed
-    // (you could use a separate nominal speed here if you want)
+  // How far below min are we?
+  double deficit = m_min_tow_speed - towed_speed;
+
+  if (deficit > 0) {
+    // Tow too slow: increase commanded speed proportionally,
+    // but don't jump straight to max.
+    double gain = 1.5; // tune: how aggressively we react
+    summit_speed = m_min_tow_speed + gain * deficit;
+  } else {
+    // Tow fine: be happy around the min safe speed.
     summit_speed = m_min_tow_speed;
   }
 
-  // Clamp to domain, just in case
+  // Clamp to domain
   if (summit_speed < dom_spd_min)
     summit_speed = dom_spd_min;
   if (summit_speed > dom_spd_max)
     summit_speed = dom_spd_max;
+
 
   spd_zaic.setSummit(summit_speed);
   spd_zaic.setMinMaxUtil(0, 100);
