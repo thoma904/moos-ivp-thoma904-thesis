@@ -54,6 +54,9 @@ class Towing : public AppCastingMOOSApp
  double m_attach_offset;   // distance from NAV_ reference to tow hook [m]
  double m_anchor_x;        // world x of tow hook
  double m_anchor_y;        // world y of tow hook
+ double m_spring_stiffness; // spring stiffness constant
+ double m_cd;               // drag coefficient
+ double m_tan_damping; // tangential damping constant
 };
 
 #endif 

@@ -28,16 +28,19 @@ Towing::Towing()
   m_start_x = 0;
   m_start_y = 0;
   m_prev_heading = 0; 
-  m_towed_vx = m_towed_vy = 0; // Initialize towed body velocity
-  m_prev_time = 0; // Initialize previous time
+  m_towed_vx = m_towed_vy = 0; // towed body velocity
+  m_prev_time = 0; 
   m_deployed = false;
-  m_cable_distance = 0; // Initialize cable distance for troubleshooting
-  m_nav_speed = 0; // Initialize vessel speed
-  m_nav_vx = 0; // Initialize vessel velocity in x direction
-  m_nav_vy = 0; // Initialize vessel velocity in y direction
-  m_attach_offset = 0;   // distance from NAV_ reference to tow hook [m]
+  m_cable_distance = 0;
+  m_nav_speed = 0; 
+  m_nav_vx = 0; // vessel velocity in x direction
+  m_nav_vy = 0; // vessel velocity in y direction
+  m_attach_offset = 0;   // tow hook offset from NAV_ reference [m]
   m_anchor_x = 0;        // world x of tow hook
   m_anchor_y = 0;        // world y of tow hook
+  m_spring_stiffness = 5.0; // spring stiffness constant 1/s^2
+  m_cd = 0.7;               // lumped drag coefficient 1/m
+  m_tan_damping = 2.0; // tangential damping constant 1/s
 }
 
 //---------------------------------------------------------
@@ -129,18 +132,20 @@ bool Towing::Iterate()
   {
     m_start_x = m_nav_x;
     m_start_y = m_nav_y;
-    m_towed_x = m_nav_x;  // initialize towed body here too
+    //towed body starts at vessel position
+    m_towed_x = m_nav_x;
     m_towed_y = m_nav_y;
   }
 
-  // 1. Store vessel position
+  // Store vessel position
   m_towing_position.add_vertex(m_nav_x, m_nav_y);
 
-  // 2. Trim history to prevent memory bloat
+  // Trim history to prevent memory bloat
   if(m_towing_position.size() > 500)
     m_towing_position.delete_vertex(0);
 
-  // 3. Compute distance from start
+  // Approximate paid-out distance: vessel displacement from start minus attach_offset
+  // (Best when vessel travels roughly straight; turning makes this approximation less exact.)
   double dx0 = m_nav_x - m_start_x;
   double dy0 = m_nav_y - m_start_y;
   double dist_from_start = hypot(dx0, dy0) - m_attach_offset;
@@ -158,8 +163,9 @@ bool Towing::Iterate()
     else 
     {
       m_deployed = true; // Cable fully deployed, switch to tow model
-      m_towed_vx = m_nav_vx; //initialize with towing vessel's velocity
-      m_towed_vy = m_nav_vy; //initialize with towing vessel's velocity
+      // Initialize towed body velocity to vessel velocity
+      m_towed_vx = m_nav_vx; 
+      m_towed_vy = m_nav_vy; 
       Notify("TOW_DEPLOYED", "true");
     }
   }
@@ -168,11 +174,12 @@ bool Towing::Iterate()
   {
     // -----------------------
     // Spring-Pull Tow Model
+    // Tow dynamics (drag + damping + optional tension) + rigid cable constraint projection
     // -----------------------
     double dx = m_anchor_x - m_towed_x;
     double dy = m_anchor_y - m_towed_y;
     double distance = hypot(dx, dy); // Current distance between anchor point and towed body
-    m_cable_distance = distance; // Store for troubleshooting
+    m_cable_distance = distance; // pre-clamp distance (useful for detecting overshoot), stored for troubleshooting
 
     if(distance > 0.01) //avoid division by zero
     {
@@ -182,35 +189,39 @@ bool Towing::Iterate()
       if (d_dir < 1e-6)
         d_dir = 1.0;
 
-      double ux = dx_dir / d_dir;    // unit vector along cable
+      // unit vector along cable
+      double ux = dx_dir / d_dir;
       double uy = dy_dir / d_dir;
-      double nx = -uy;               // tangential unit vector
+      // tangential unit vector
+      double nx = -uy;
       double ny = ux;
 
-      // --- Spring (only pull) ---
+      // Soft tension term: adds an inward acceleration if cable is overstretched.
+      // Note: even with the rigid clamp below, this still affects velocity (dynamics).
+      // Disable this if you want a purely rigid/inextensible cable behavior.
       if(distance > m_cable_length) 
       {
         double overshoot = distance - m_cable_length; //amount stretched beyond cable length
-        double k = 5.0; // s^-2 (tuneable spring constant)
+        double k = m_spring_stiffness; // s^-2 (tuneable spring constant, higher = stiffer spring)
         m_towed_vx += k * overshoot * ux * dt;
         m_towed_vy += k * overshoot * uy * dt;
       }
 
-      // --- Quadratic drag based on the tow‑fish speed ---
+      // --- Quadratic drag based on the tow speed ---
       // This simulates the drag force proportional to the square of the speed
-      // Essentially uses towing body speed to calculate drag
+      // Uses the towed body's speed to apply quadratic drag.
 
       double speed = hypot(m_towed_vx, m_towed_vy);
       if(speed > 1e-6) 
       {
-        double CdA_over_m = 0.7; // 1/m  (tunable lumped drag coefficient)
+        double CdA_over_m = m_cd; // 1/m  (tunable lumped drag coefficient)
         m_towed_vx += -CdA_over_m * m_towed_vx * speed * dt;
         m_towed_vy += -CdA_over_m * m_towed_vy * speed * dt;
       }
 
-      // --- Extra tangential damping (Returns towed body to centerline) ---
+      // Extra tangential damping: damps sideways motion perpendicular to the cable direction (reduces swinging).
       double vt = m_towed_vx*nx + m_towed_vy*ny;    // sideways
-      double c_tan = 2; // 1/s  (tuneable)
+      double c_tan = m_tan_damping; // 1/s  (tuneable)
       m_towed_vx += (-c_tan * vt) * nx * dt;
       m_towed_vy += (-c_tan * vt) * ny * dt;
 
@@ -221,28 +232,39 @@ bool Towing::Iterate()
       // --- Rigid cable clamp ---
       // Forces the towed body to stay within the cable length
 
-     double sx = m_anchor_x - m_towed_x;
-     double sy = m_anchor_y - m_towed_y;
-     double dist2 = hypot(sx, sy);
+      // vector from towed body to anchor
+      double sx = m_anchor_x - m_towed_x;
+      double sy = m_anchor_y - m_towed_y;
 
-     if(dist2 > m_cable_length) 
-     {
-      double sc = m_cable_length / dist2;
+      //actual distance between towed body and anchor
+      double dist_a = hypot(sx, sy);
 
-      // Project to circle of radius cable_length around anchor
-      m_towed_x = m_anchor_x - sx * sc;
-      m_towed_y = m_anchor_y - sy * sc;
-
-      // Remove outward radial velocity relative to anchor
-      double urx = sx / dist2;
-      double ury = sy / dist2;
-      double vrad = m_towed_vx * urx + m_towed_vy * ury;
-      if(vrad < 0) 
+      if(dist_a > m_cable_length) 
       {
+
+       //ratio to scale back the vector, <1 means towed body is too far
+       double sc = m_cable_length / dist_a;
+
+       // slide the towed body back to the cable length
+       m_towed_x = m_anchor_x - sx * sc;
+       m_towed_y = m_anchor_y - sy * sc;
+
+       // unit vector from towed body to anchor
+       double urx = sx / dist_a;
+       double ury = sy / dist_a;
+
+       // Radial velocity along unit vector (tow -> anchor). Positive = toward anchor, negative = outward.
+       // Note: This uses tow velocity in world frame; a more physical model would use (v_towed - v_anchor).
+       double vrad = m_towed_vx * urx + m_towed_vy * ury;
+      
+       // If vrad < 0, tow is moving outward (away from anchor), which would increase cable length.
+       if(vrad < 0) 
+       {
+        // Remove the outward radial component so velocity is tangential and/or inward only.
         m_towed_vx -= vrad * urx;
         m_towed_vy -= vrad * ury;
+       }
       }
-     }
     }
   }
 
@@ -266,12 +288,14 @@ bool Towing::Iterate()
   Notify("TOWING_HEADING", tb_hdg_str);
   Notify("TOWED_HEADING", tow_heading);
 
+  /* This was replaced by NODE_REPORT_LOCAL, can be re-enabled if desired for troubleshooting.
   // VIEW_POINT for MarineViewer
   string body_str = "x=" + doubleToStringX(m_towed_x,1) + ",y=" +
                     doubleToStringX(m_towed_y,1) + ",label=TOW_BODY";
   body_str += ",type=diamond,color=red";
   body_str += ",heading=" + doubleToStringX(tow_heading,1);
   Notify("VIEW_POINT", body_str);
+  */
 
   // VIEW_SEGLIST for cable
   string cable_str = "pts={" + doubleToStringX(m_anchor_x,1) + "," +
@@ -299,7 +323,7 @@ bool Towing::Iterate()
         << ",Y="     << doubleToStringX(m_towed_y, 2)
         << ",SPD="   << doubleToStringX(tow_speed, 2)
         << ",HDG="   << doubleToStringX(angle360(tow_hdg_vel), 1)
-        << ",LENGTH="<< 1.0                               // optional visual hint
+        << ",LENGTH="<< 1.0                               //adjusts size of towed body icon
         << ",MODE="  << "TOWING"
         << ",COLOR=" << "orange";                        // helps distinguish in viewer
 
@@ -341,6 +365,24 @@ bool Towing::OnStartUp()
     else if(param == "attach_offset") 
     {
       m_attach_offset = stod(value);
+      handled = true;
+    }
+
+    else if(param == "spring_stiffness")
+    {
+      m_spring_stiffness = stod(value);
+      handled = true;
+    }
+
+    else if(param == "drag_coefficient")
+    {
+      m_cd = stod(value);
+      handled = true;
+    }
+
+    else if(param == "tangential_damping")
+    {
+      m_tan_damping = stod(value);
       handled = true;
     }
 
@@ -399,13 +441,3 @@ std::string Towing::join(const vector<string> &vec, const string &delim) {
   }
   return result;
 }
-
-
-//consider using a cable length behind the vessel as an anchor point to guide the towed body instead of the vessel's current position
-
-//register for positions of obstacles and have the towed body avoid them
-//make more realistic shape of towed body for obstacle avoidance
-//are the obstacles on the fly or pre-known?
-//how are they representing obstacles in the MOOS world?
-//how to convert bathymetry to obstacles?
-//bound the behavior to avoid straight line and breadcrumb paths
