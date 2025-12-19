@@ -34,13 +34,18 @@ protected: // Configuration parameters
 
 protected: // State variables
 
-double m_osx;
-double m_osy;
-double m_towx;
-double m_towy;
-double m_osh;
-double m_osd;
-bool   m_turning;
+double m_entry_hdg;
+bool   m_entry_hdg_set;
+double m_target_hdg;
+double m_hdg_tol;
+bool   m_phase1_done;
+double m_phase1_hdg;
+int    m_turn_dir;        // +1 = starboard (CW/increasing hdg), -1 = port (CCW/decreasing)
+double m_initial_turn;    // deg (default 60)
+double m_max_step;        // deg per iteration in phase2 (default 60)
+double m_capture_range;        // deg: when remaining angle <= this, command target directly
+unsigned int m_settle_count;   // consecutive iterations within tolerance
+unsigned int m_settle_required;
 
 };
 

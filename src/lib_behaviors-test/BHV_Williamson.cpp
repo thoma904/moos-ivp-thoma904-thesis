@@ -5,14 +5,12 @@
 /*    DATE:                                                 */
 /************************************************************/
 
-#include <iterator>
 #include <cstdlib>
 #include "MBUtils.h"
 #include "BuildUtils.h"
 #include "BHV_Williamson.h"
 #include "IvPFunction.h"
 #include "ZAIC_PEAK.h"
-#include "OF_Coupler.h"
 #include "AngleUtils.h"
 
 using namespace std;
@@ -29,12 +27,22 @@ BHV_Williamson::BHV_Williamson(IvPDomain domain) :
   // Declare the behavior decision space
   m_domain = subDomain(m_domain, "course");
 
-  m_osx = 0;
-  m_osy = 0;
-  m_osh = 0;
+  m_entry_hdg_set = false;
+  m_entry_hdg     = 0;
+  m_target_hdg    = 0;
+  m_hdg_tol       = 1.0;   // deg tolerance for completion
+  m_turn_dir     = 1;      // default starboard first
+  m_initial_turn = 60.0;
+  m_max_step     = 90.0;   // deg per iteration in phase2
+  m_capture_range   = 30.0;   // start capturing inside 30 deg of target
+  m_settle_count    = 0;
+  m_settle_required = 5;      // must be within tolerance for 5 helm iterations
+
+  m_phase1_done  = false;
+  m_phase1_hdg   = 0;
 
   // Add any variables this behavior needs to subscribe for
-  addInfoVars("NAV_X, NAV_Y, NAV_HEADING, WPT_INDEX");
+  addInfoVars("NAV_HEADING");
 }
 
 //---------------------------------------------------------------
@@ -47,13 +55,39 @@ bool BHV_Williamson::setParam(string param, string val)
 
   // Get the numerical value of the param argument for convenience once
   double double_val = atof(val.c_str());
-  
-  if((param == "foo") && isNumber(val)) {
-    // Set local member variables here
+
+  if((param == "heading_tolerance") && isNumber(val)) 
+  {
+    m_hdg_tol = double_val;
     return(true);
   }
-  else if (param == "bar") {
-    // return(setBooleanOnString(m_my_bool, val));
+  
+  else if((param == "initial_turn") && isNumber(val)) 
+  {
+    m_initial_turn = double_val;
+    return(true);
+  }
+  
+  else if((param == "max_step") && isNumber(val)) 
+  {
+    m_max_step = double_val;
+    return(true);
+  }
+  
+  else if(param == "turn_direction") 
+  {
+    val = tolower(val);
+    if(val == "port") 
+    {
+      m_turn_dir = -1;
+      return(true);
+    }
+    else if(val == "starboard") 
+    {
+      m_turn_dir = 1;
+      return(true);
+    }
+    return(false);
   }
 
   // If not handled above, then just return false;
@@ -85,6 +119,9 @@ void BHV_Williamson::onHelmStart()
 
 void BHV_Williamson::onIdleState()
 {
+  m_entry_hdg_set = false;
+  m_phase1_done   = false;
+  m_settle_count  = 0;
 }
 
 //---------------------------------------------------------------
@@ -92,6 +129,9 @@ void BHV_Williamson::onIdleState()
 
 void BHV_Williamson::onCompleteState()
 {
+  m_entry_hdg_set = false;
+  m_phase1_done   = false;
+  m_settle_count  = 0;
 }
 
 //---------------------------------------------------------------
@@ -125,9 +165,9 @@ IvPFunction *BHV_Williamson::buildFunctionWithZAIC(double target_heading)
 {
   ZAIC_PEAK crs_zaic(m_domain, "course");
   crs_zaic.setSummit(angle360(target_heading));
-  crs_zaic.setPeakWidth(0);
-  crs_zaic.setBaseWidth(180.0);
-  crs_zaic.setSummitDelta(0);
+  crs_zaic.setPeakWidth(0.0);
+  crs_zaic.setBaseWidth(60.0);
+  crs_zaic.setSummitDelta(0.0);
   crs_zaic.setValueWrap(true);
 
   if(!crs_zaic.stateOK()) {
@@ -146,80 +186,95 @@ IvPFunction *BHV_Williamson::buildFunctionWithZAIC(double target_heading)
 
 IvPFunction* BHV_Williamson::onRunState()
 {
-// Part 1: Get heading (treat heading like waypoints)
   bool ok_hdg = false;
-  double osh = getBufferDoubleVal("NAV_HEADING", ok_hdg);
-  if(!ok_hdg) {
+  double nav_hdg = getBufferDoubleVal("NAV_HEADING", ok_hdg);
+
+  if(!ok_hdg) 
+  {
     postWMessage("Williamson: NAV_HEADING missing/stale.");
     return(0);
   }
 
-  bool ok_index = false;
-  double wpt_index = getBufferDoubleVal("WPT_INDEX", ok_index);
-  if(!ok_index) {
-    postWMessage("Williamson: WPT_INDEX missing/stale.");
-    return(0);
+  nav_hdg = angle360(nav_hdg);
+
+  // First iteration while active: latch entry heading and compute phase headings
+  if(!m_entry_hdg_set) {
+    m_entry_hdg     = nav_hdg;
+
+    // Phase 1 target: 60 deg in initial turn direction
+    // turn_dir: +1 = starboard (increase heading), -1 = port (decrease)
+    m_phase1_hdg    = angle360(m_entry_hdg + m_turn_dir * m_initial_turn);
+
+    // Final target: reciprocal of entry
+    m_target_hdg    = angle360(m_entry_hdg + 180.0);
+
+    m_phase1_done   = false;
+    m_entry_hdg_set = true;
   }
 
-  if (wpt_index < 1) {
-    setComplete();
-    return(0);
-  }
+  double course_des = m_target_hdg;
 
-  else if (wpt_index/2 != (int)(wpt_index/2)) {
-    setComplete();
-    return(0);
-  }
+  // -----------------------
+  // Phase 1: initial 60 deg turn (toward MOB side)
+  // -----------------------
+  if(!m_phase1_done) {
 
-  else
-  {
-    // ---- Simple knobs (tune here) ----
-    const bool   FIRST_PORT = false; // false = starboard-first, true = port-first
-    const double HDG_TOL    = 5.0;   // deg: when |error| <= tol, advance to next heading
-    const double A1         = 60.0;  // deg offset for the first heading
-    const double A2         = 60.0;  // deg between 2nd and 3rd (so total ends at reciprocal)
+    // Signed delta from entry to current in [-180,180]
+    // Positive = starboard, Negative = port
+    double delta = angle180(nav_hdg - m_entry_hdg);
 
-    // ---- Tiny persistent state: a 3-step "heading waypoint" list ----
-    // idx: 0 => H1, 1 => H2, 2 => H3, 3 => done
-    static bool   s_started = false;
-    static int    s_idx     = 0;
-    static double s_targets[3];   // H1, H2, H3
-    static double s_stem_hdg = 0;
-
-    // Helper: |heading error| using smallest difference (0..180)
-    auto hdg_err = [](double a, double b) { return angleDiff(a, b); };
-
-    // Part 2: Initialize "heading waypoints" the first time we run
-    if(!s_started) {
-      s_started  = true;
-      s_idx      = 0;
-      s_stem_hdg = osh;
-
-      // H1/H2 force the *direction* change. H3 is the reciprocal.
-      if(FIRST_PORT) {
-        s_targets[0] = angle360(s_stem_hdg - A1);      // port 60
-        s_targets[1] = angle360(s_stem_hdg + A2);      // reverse (starboard) 120 to -60
-      } else {
-        s_targets[0] = angle360(s_stem_hdg + A1);      // starboard 60
-        s_targets[1] = angle360(s_stem_hdg - A2);      // reverse (port) 120 to -60
-      }
-      s_targets[2] = angle360(s_stem_hdg + 180.0);     // reciprocal
+    // When we've turned at least initial_turn in the commanded direction, switch to phase 2
+    if((m_turn_dir * delta) >= (m_initial_turn - m_hdg_tol)) 
+    {
+      m_phase1_done = true;
+    } 
+    else 
+    {
+      // Keep voting for the phase1 heading
+      course_des = m_phase1_hdg;
+      return buildFunctionWithZAIC(course_des);
     }
+  }
 
-    // Part 3: If we're within tolerance of the current heading-target, advance
-    if(s_idx < 3 && hdg_err(osh, s_targets[s_idx]) <= HDG_TOL)
-      ++s_idx;
+  // -----------------------
+  // Phase 2: reverse direction and continue turning "the long way" to reciprocal
+  // This creates the 240 deg portion of the Williamson turn.
+  // -----------------------
+  int dir2 = -m_turn_dir;  // reverse direction from phase 1
 
-    // Done? Mimic waypoint behavior: mark complete and return no function
-    if(s_idx >= 3) {
-      s_started = false;
+  // Compute remaining angle to target if we turn in dir2
+  // Starboard (CW/increasing): diff_star = target - current wrapped [0,360)
+  // Port     (CCW/decreasing): diff_port = current - target wrapped [0,360)
+  double diff_star = angle360(m_target_hdg - nav_hdg);
+  double diff_port = angle360(nav_hdg - m_target_hdg);
+
+  double diff_dir = (dir2 > 0) ? diff_star : diff_port;
+
+  // --- Capture mode ---
+  // When close enough, stop leading and command the target heading directly.
+  // (By the time diff_dir is small (e.g., 30 deg), the short-way direction is dir2 anyway,
+  // so commanding the target won't "shortcut" the 240 deg portion.)
+  if(diff_dir <= m_capture_range) {
+    course_des = m_target_hdg;        // tighten up and settle
+  } else {
+    double step = std::min(diff_dir, m_max_step);
+    course_des  = angle360(nav_hdg + dir2 * step);  // keep forcing turn direction
+  }
+
+  // --- Completion logic ---
+  // Use absolute heading error to target (shortest difference).
+  double err = angleDiff(nav_hdg, m_target_hdg);
+
+  if(err <= m_hdg_tol) {
+    m_settle_count++;
+    if(m_settle_count >= m_settle_required) {
       setComplete();
       return(0);
     }
-
-    // Part 4: Emit a course-only preference toward the current heading "waypoint"
-    IvPFunction* ipf = buildFunctionWithZAIC(s_targets[s_idx]);
-    return ipf;
+  } else {
+    m_settle_count = 0;
   }
+
+  return buildFunctionWithZAIC(course_des);
 }
 
