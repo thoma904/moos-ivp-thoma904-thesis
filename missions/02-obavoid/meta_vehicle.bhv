@@ -150,3 +150,17 @@ Behavior = BHV_Towing
   base_width    = 180
   summit_delta  = 30
 }
+
+Behavior = BHV_MemoryTurnLimit
+{
+  // General Behavior Parameters
+  // ---------------------------
+  name = mem_turn_limit // default
+  pwt = 100 // default
+  condition = MODE==TRANSITING
+  updates = MEM_TURN_UPDATES // example
+  // Parameters specific to this behavior
+  // ------------------------------------
+  memory_time = 60 // example (seconds)
+  turn_range = 30 // example (degrees)
+}
