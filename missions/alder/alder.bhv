@@ -2,20 +2,66 @@
 
 initialize   DEPLOY = false
 initialize   RETURN = false
+initialize   MOB = false
 
 //----------------------------------------------
-Behavior = BHV_SimpleWaypoint
-{ 
-  name      = waypt_to_point
+Behavior = BHV_Waypoint
+{
+  name      = waypt_survey
   pwt       = 100
-  condition = RETURN = false
   condition = DEPLOY = true
+  condition = MOB = false
   endflag   = RETURN = true
 
-  speed      = 2.0   // meters per second
-  radius     = 8.0
-  ptx        = 100
-  pty        = -50
+  updates   = WPT_UPDATE
+  perpetual = true
+
+                lead = 8
+         lead_damper = 1
+       lead_to_start = true
+              speed = 2  // meters per second
+	      
+        capture_line = true
+      capture_radius = 2
+         slip_radius = 10
+	efficiency_measure = all
+
+              points = format=lawnmower, x=0, y=-60, height=60, width=100, lane_width=15
+
+              wptflag = PREV_WPT_X = $[X]
+              wptflag = PREV_WPT_Y = $[Y]
+              wptflag = NEXT_WPT_X = $[NX]
+              wptflag = NEXT_WPT_Y = $[NY]
+	
+              repeat = forever
+
+    visual_hints = nextpt_color=yellow
+    visual_hints = nextpt_vertex_size=8
+    visual_hints = nextpt_lcolor=gray70
+    visual_hints = vertex_color=dodger_blue, edge_color=white
+    visual_hints = vertex_size=5, edge_size=1
+}
+
+//----------------------------------------------
+Behavior = BHV_Williamson
+{
+  name       = Williamson
+  pwt        = 100
+  condition  = MOB = true
+  perpetual = true
+
+  heading_tolerance = 5
+}
+
+//----------------------------------------------
+Behavior=BHV_ConstantSpeed
+{
+  name       = will_speed
+  pwt        = 100
+  perpetual  = true
+  condition  = MOB = true
+
+  speed = 2
 }
 
 //----------------------------------------------
