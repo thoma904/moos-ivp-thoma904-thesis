@@ -888,10 +888,10 @@ void TowObstacleMgr::postConvexHullUpdate(string key, string alert_var,
   double d_sys = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
   d_sys = std::max(0.0, d_sys - m_tow_pad);
 
-  update_str += "#dist_sys="   + doubleToStringX(d_sys,   1);
-  update_str += "#dist_nav="   + doubleToStringX(d_nav,   1);
-  update_str += "#dist_tow="   + doubleToStringX(d_tow,   1);
-  update_str += "#dist_cable=" + doubleToStringX(d_cable, 1);
+  //update_str += "#dist_sys="   + doubleToStringX(d_sys,   1);
+  //update_str += "#dist_nav="   + doubleToStringX(d_nav,   1);
+  //update_str += "#dist_tow="   + doubleToStringX(d_tow,   1);
+  //update_str += "#dist_cable=" + doubleToStringX(d_cable, 1);
 
   m_alerts_posted++;  
   Notify(alert_var, update_str);
