@@ -433,7 +433,8 @@ bool Towing::buildReport()
 }
 
 
-std::string Towing::join(const vector<string> &vec, const string &delim) {
+std::string Towing::join(const vector<string> &vec, const string &delim) 
+{
   string result;
   for(size_t i = 0; i < vec.size(); ++i) {
     if(i != 0) result += delim;
