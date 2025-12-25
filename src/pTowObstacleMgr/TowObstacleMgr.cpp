@@ -1,7 +1,7 @@
 /************************************************************/
 /*    NAME: Tom Monaghan                                              */
 /*    ORGN: MIT, Cambridge MA                               */
-/*    FILE: TowObstacleMgr.cpp                                        */
+/*    FILE: TowObstacleMgr.cpp                                          */
 /*    DATE: December 29th, 1963                             */
 /************************************************************/
 
@@ -15,9 +15,6 @@
 #include "ConvexHullGenerator.h"
 #include "XYFormatUtilsPoint.h"
 #include "XYFormatUtilsPoly.h"
-#include "XYPolygon.h"
-#include <sstream>
-#include <cmath>
 
 using namespace std;
 
@@ -60,8 +57,6 @@ TowObstacleMgr::TowObstacleMgr()
   // Init State Variables
   m_nav_x = 0;
   m_nav_y = 0;
-  m_towed_x = 0;
-  m_towed_y = 0;
 
   m_points_total   = 0;
   m_points_ignored = 0;
@@ -80,21 +75,15 @@ TowObstacleMgr::TowObstacleMgr()
 
   m_alert_var = "";    // Initially no alerts will be posted
 
-  // --- Tow adapter defaults ---
-  m_src_var       = "OBM_TOW_SOURCE";  // OBM posts hull alerts here
-  m_out_var       = "OBM_TOW_GUTS";    // we publish grown hulls here
-  m_tow_radius    = 4.0;               // meters
-  m_src_range     = 2000.0;            // meters
-  m_src_name      = "tow";             // name= prefix in OBM request
-  m_post_tow_view = false;             // overlay grown hulls
-  m_tow_view_color= "yellow";
-}
+  //Tow Specific Additions
+  m_use_tow = false;
+  m_tow_deployed = false;
+  m_towed_x = 0;
+  m_towed_y = 0;
 
-//---------------------------------------------------------
-// Destructor
-
-TowObstacleMgr::~TowObstacleMgr()
-{
+  m_use_tow_cable = true;
+  m_cable_sample_step = 1.0;
+  m_tow_pad = 0.0;
 }
 
 //---------------------------------------------------------
@@ -132,6 +121,8 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       m_nav_y = dval;
       handled = true;
     }
+
+    //Tow Specific Additions
     else if(key == "TOWED_X") {
       m_towed_x = dval;
       handled = true;
@@ -140,6 +131,11 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       m_towed_y = dval;
       handled = true;
     }
+    else if(key == "TOW_DEPLOYED") {
+      m_tow_deployed = (tolower(sval) == "true") || (tolower(sval) == "yes");
+      handled = true;
+    }
+
     else if(key == "GIVEN_OBSTACLE") 
       handled = handleGivenObstacle(sval);
     else if(key == "OBM_ALERT_REQUEST") 
@@ -150,10 +146,6 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       handled = handleMailModEnableObstacle(sval, "expunge");
     else if((m_enable_var != "") && (key == m_enable_var))
       handled = handleMailModEnableObstacle(sval, "enable");
-
-    else if(key == m_src_var)  // polygons from ObstacleMgr
-      handled = handleMailObmAlert(sval);
-
     else if(key == "APPCAST_REQ") // handle by AppCastingMOOSApp
       handled = true;
 
@@ -180,7 +172,6 @@ bool TowObstacleMgr::OnConnectToServer()
 
 //---------------------------------------------------------
 // Procedure: Iterate()
-//            happens AppTick times per second
 
 bool TowObstacleMgr::Iterate()
 {
@@ -197,7 +188,6 @@ bool TowObstacleMgr::Iterate()
 
 //---------------------------------------------------------
 // Procedure: OnStartUp()
-//            happens before connection is open
 
 bool TowObstacleMgr::OnStartUp()
 {
@@ -261,21 +251,6 @@ bool TowObstacleMgr::OnStartUp()
     else if(param == "lasso")
       handled = setBooleanOnString(m_lasso, value);
 
-    else if(param == "tow_radius")
-      handled = setPosDoubleOnString(m_tow_radius, value);
-    else if(param == "tow_out_var")
-      handled = setNonWhiteVarOnString(m_out_var, value);
-    else if(param == "obm_src_var")
-      handled = setNonWhiteVarOnString(m_src_var, value);
-    else if(param == "obm_src_range")
-      handled = setPosDoubleOnString(m_src_range, value);
-    else if(param == "obm_src_name")
-      handled = setNonWhiteVarOnString(m_src_name, value);
-    else if(param == "post_tow_view")
-      handled = setBooleanOnString(m_post_tow_view, value);
-    else if(param == "tow_view_color")
-      handled = setColorOnString(m_tow_view_color, value);
-
     else if(param == "lasso_points") {
       handled = setUIntOnString(m_lasso_points, value);
       if(m_lasso_points < 3) {
@@ -289,7 +264,18 @@ bool TowObstacleMgr::OnStartUp()
 	reportConfigWarning("lasso_radius must be at positive number");
 	m_lasso_radius = 1;
       }
-    }      
+    }
+    
+    //Tow Specific Additions
+    else if(param == "use_tow")
+      handled = setBooleanOnString(m_use_tow, value);
+    else if(param == "use_tow_cable")
+      handled = setBooleanOnString(m_use_tow_cable, value);
+    else if(param == "cable_sample_step")
+      handled = setPosDoubleOnString(m_cable_sample_step, value);
+    else if(param == "tow_pad")
+      handled = setDoubleOnString(m_tow_pad, value);
+
     if(!handled)
       reportUnhandledConfigWarning(orig);
   }
@@ -299,13 +285,6 @@ bool TowObstacleMgr::OnStartUp()
   // actually need
   if(m_point_var == "")
     m_point_var = "TRACKED_FEATURE";
-
-  // Ask ObstacleMgr to feed hull alerts to us on m_src_var
-  std::string req = "name=" + m_src_name +
-                    ",update_var=" + m_src_var +
-                    ",alert_range=" + doubleToStringX(m_src_range,1);
-  Notify("OBM_ALERT_REQUEST", req);
-  reportEvent("OBM_ALERT_REQUEST=" + req);
 
   Notify("OBM_CONNECT", "true");
   reportEvent("OBM_CONNECT=true");
@@ -325,13 +304,14 @@ void TowObstacleMgr::registerVariables()
 
   Register("NAV_X", 0);
   Register("NAV_Y", 0);
-  Register("TOWED_X", 0);
-  Register("TOWED_Y", 0);
 
   Register("GIVEN_OBSTACLE",0);
   Register("OBM_ALERT_REQUEST",0);
 
-  Register(m_src_var, 0);
+  //Tow Specific Additions
+  Register("TOWED_X",0);
+  Register("TOWED_Y",0);
+  Register("TOW_DEPLOYED",0);
 
   // Register for any variables involved in the MailFlagSet
   vector<string> mflag_vars = m_mfset.getMailFlagKeys();
@@ -345,6 +325,7 @@ void TowObstacleMgr::registerVariables()
   if(m_expunge_var != "")
     Register(m_expunge_var, 0);
 }
+
 
 //------------------------------------------------------------
 // Procedure: customStringToPoint()
@@ -829,8 +810,23 @@ void TowObstacleMgr::postConvexHullUpdates()
 
     // Double check it is convex
     if(poly.is_convex()) {
-      double dist = poly.dist_to_poly(m_nav_x, m_nav_y);
+      //double dist = poly.dist_to_poly(m_nav_x, m_nav_y);
+      //bool close_range = (dist <= m_alert_range);
+
+      // Tow Specific Additions
+      double d_nav, d_tow, d_cable;
+      double dist = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
+      dist = std::max(0.0, dist - m_tow_pad);
+
       bool close_range = (dist <= m_alert_range);
+
+      if(close_range) 
+      {
+        Notify("OBM_DIST_NAV",   doubleToStringX(d_nav,1));
+        Notify("OBM_DIST_TOW",   doubleToStringX(d_tow,1));
+        Notify("OBM_DIST_CABLE", doubleToStringX(d_cable,1));
+        Notify("OBM_DIST_SYS",   doubleToStringX(dist,1));
+      }
 
       bool post_this_dist_to_poly = false;
       if(m_post_dist_to_polys == "true")
@@ -839,7 +835,8 @@ void TowObstacleMgr::postConvexHullUpdates()
 	post_this_dist_to_poly = true;
 
       // Only post dist if ownship w/in alert range or always on
-      if(post_this_dist_to_poly) {
+      if(post_this_dist_to_poly) 
+      {
 	string msg = toupper(key) + "," + doubleToString(dist,1);
 	Notify("OBM_DIST_TO_OBJ", msg);
 	//reportEvent("OBM_DIST_TO_OBJ="+msg);
@@ -853,10 +850,12 @@ void TowObstacleMgr::postConvexHullUpdates()
 	m_map_obstacles[key].setChanged(false);
 	m_map_obstacles[key].incUpdatesTotal();
 
+
+
 	// Only post hull if ownship is w/in alert range
 	if(close_range)
 	  postConvexHullUpdate(key, m_alert_var, m_alert_name);
-	if((m_alert_var != "") && (dist <= m_gen_alert_range))
+	if((m_gen_alert_var != "") && (dist <= m_gen_alert_range))
 	  postConvexHullUpdate(key, m_gen_alert_var, m_gen_alert_name);
       }      
     }
@@ -882,6 +881,17 @@ void TowObstacleMgr::postConvexHullUpdate(string key, string alert_var,
 
   // mikerb May1425
   update_str += "#id=" + key;
+
+
+  // Tow Specific Additions
+  double d_nav, d_tow, d_cable;
+  double d_sys = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
+  d_sys = std::max(0.0, d_sys - m_tow_pad);
+
+  update_str += "#dist_sys="   + doubleToStringX(d_sys,   1);
+  update_str += "#dist_nav="   + doubleToStringX(d_nav,   1);
+  update_str += "#dist_tow="   + doubleToStringX(d_tow,   1);
+  update_str += "#dist_cable=" + doubleToStringX(d_cable, 1);
 
   m_alerts_posted++;  
   Notify(alert_var, update_str);
@@ -978,7 +988,12 @@ void TowObstacleMgr::updatePolyRanges()
   for(p=m_map_obstacles.begin(); p!=m_map_obstacles.end(); p++) {
     string    key   = p->first;
     XYPolygon poly  = p->second.getPoly();
-    double    range = poly.dist_to_poly(m_nav_x, m_nav_y);
+    //double    range = poly.dist_to_poly(m_nav_x, m_nav_y);
+
+    // Tow Specific Additions
+    double d_nav, d_tow, d_cable;
+    double range = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
+    range = std::max(0.0, range - m_tow_pad);   // optional pad
 
     // Also keep track of closest range ever to any obstacle
     if((m_min_dist_ever < 0) || (range < m_min_dist_ever)) {
@@ -1164,49 +1179,7 @@ string TowObstacleMgr::expandMacros(string sdata) const
 
   return(sdata);
 }
-
-bool TowObstacleMgr::handleMailObmAlert(std::string msg)
-{
-  // OBM alert example:
-  // name=tow_ob_42#,poly=pts={...},label=ob_42#,vsource=radar#,id=ob_42
-  // Extract the poly field using '#' as the record delimiter
-  std::string poly_seg = tokStringParse(msg, "poly", '#', '=');
-  if(poly_seg == "")
-    return(false);
-
-  // Build polygon from the poly field (handles "pts=...,label=..." format)
-  XYPolygon poly = string2Poly(poly_seg);
-  if(poly.size() < 3 || !poly.is_convex())
-    return(false);
-
-  // Grow by tow radius (Minkowski dilation) to cover tow body footprint
-  //if(m_tow_radius > 0)
-    //poly.grow_by(m_tow_radius);
-
-  // Optional: get a label (prefer the one embedded in the poly segment)
-  std::string label = tokStringParse(poly_seg, "label", ',', '=');
-  if(label == "")
-    label = tokStringParse(msg, "id", '#', '=');
-  if(label == "")
-    label = "tow_ob"; // fallback
-
-  poly.set_label(label);
-
-  // Optional viewer overlay of grown hull
-  if(m_post_tow_view) {
-    poly.set_color("edge", m_tow_view_color);
-    poly.set_color("fill", m_tow_view_color);
-    poly.set_transparency(0.10);
-    Notify("VIEW_POLYGON", poly.get_spec(5));
-  }
-
-  // Publish a plain poly spec for tow-aware behaviors
-  // Behaviors will collect these as a vector<string> of "poly=...,label=..."
-  std::string out = "poly=" + poly.get_spec_pts(5) + ",label=" + label;
-  Notify(m_out_var, out);
-
-  return(true);
-}
+  
 
 //------------------------------------------------------------
 // Procedure: buildReport()
@@ -1321,4 +1294,55 @@ bool TowObstacleMgr::buildReport()
   m_msgs << endl << endl;
 
   return(true);
+}
+
+//---------------------------------------------------------
+// Tow Cable Helper Function for calculating cable distance
+
+double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
+                                              double& d_nav,
+                                              double& d_tow,
+                                              double& d_cable) const
+{
+  d_nav   = poly.dist_to_poly(m_nav_x, m_nav_y);
+  d_tow   = d_nav;
+  d_cable = d_nav;
+
+  // If tow not enabled/valid, system distance is nav distance
+  if(!m_use_tow)
+    return(d_nav);
+  if(!m_tow_deployed)
+    return(d_nav);
+
+  d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
+
+  if(m_use_tow_cable) {
+    // Use NAV as cable start (conservative). If you later publish hook/anchor, use that instead.
+    double x1 = m_nav_x;
+    double y1 = m_nav_y;
+    double x2 = m_towed_x;
+    double y2 = m_towed_y;
+
+    double seg_len = hypot(x2 - x1, y2 - y1);
+    unsigned int samples = 1;
+    if(m_cable_sample_step > 0.1)
+      samples = (unsigned int)ceil(seg_len / m_cable_sample_step);
+    if(samples < 1) samples = 1;
+
+    d_cable = 1e9;
+    for(unsigned int i=0; i<=samples; i++) {
+      double t = (double)i / (double)samples;
+      double xs = x1 + t*(x2-x1);
+      double ys = y1 + t*(y2-y1);
+      double di = poly.dist_to_poly(xs, ys);
+      if(di < d_cable)
+        d_cable = di;
+    }
+  }
+
+  double d_sys = d_nav;
+  if(d_tow < d_sys)   d_sys = d_tow;
+  if(d_cable < d_sys) d_sys = d_cable;
+
+  return(d_sys);
 }

@@ -5,8 +5,8 @@
 /*    DATE: December 29th, 1963                             */
 /************************************************************/
 
-#ifndef TowObstacleMgr_HEADER
-#define TowObstacleMgr_HEADER
+#ifndef P_TOW_OBSTACLE_MGR_HEADER
+#define P_TOW_OBSTACLE_MGR_HEADER
 
 #include "MOOS/libMOOS/Thirdparty/AppCasting/AppCastingMOOSApp.h"
 #include "XYPolygon.h"
@@ -14,24 +14,23 @@
 #include "VarDataPair.h"
 #include "MailFlagSet.h"
 #include <set>
-#include <map>
 
 class TowObstacleMgr : public AppCastingMOOSApp
 {
- public:
-   TowObstacleMgr();
-   ~TowObstacleMgr();
-
- protected: // Standard MOOSApp functions to overload  
-   bool OnNewMail(MOOSMSG_LIST &NewMail);
-   bool Iterate();
-   bool OnConnectToServer();
-   bool OnStartUp();
-
- protected: // Standard AppCastingMOOSApp function to overload 
-   bool buildReport();
-
- protected:
+public:
+  TowObstacleMgr();
+  ~TowObstacleMgr() {};
+  
+protected: // Standard MOOSApp functions to overload  
+  bool OnNewMail(MOOSMSG_LIST &NewMail);
+  bool Iterate();
+  bool OnConnectToServer();
+  bool OnStartUp();
+  
+protected: // Standard AppCastingMOOSApp function to overload 
+  bool buildReport();
+  
+protected:
   void registerVariables();
 
   bool handleConfigPostDistToPolys(std::string);
@@ -70,14 +69,10 @@ class TowObstacleMgr : public AppCastingMOOSApp
   
   void onNewObstacle(std::string obs_type);
 
-  // ------------------------ NEW: Tow adapter handler ------------------------
-  // Handles a single polygon alert message from ObstacleMgr, grows by
-  // tow radius, and republishes on m_out_var for tow behaviors.
-  bool handleMailObmAlert(std::string msg);
-  // -------------------------------------------------------------------------
-
- private: // Configuration variables
-
+  //Towing specific additions
+  double distPointToPolySystem(const XYPolygon& poly, double& d_nav, double& d_tow, double& d_cable) const;
+  
+private: // Configuration variables
   std::string  m_point_var;            // incoming points
 
   std::string  m_alert_var;
@@ -117,28 +112,11 @@ class TowObstacleMgr : public AppCastingMOOSApp
   std::vector<VarDataPair> m_new_obs_flags;
 
   MailFlagSet m_mfset;
-
-  // ------------------------ NEW: Tow adapter config -------------------------
-  // Where we expect ObstacleMgr to post hull alerts to *this* app
-  std::string  m_src_var;        // default: "OBM_TOW_SOURCE"
-  // Where this app publishes tow-grown hulls for tow behaviors
-  std::string  m_out_var;        // default: "OBM_TOW_GUTS"
-  // How much to grow polygons to account for the tow body size/margin
-  double       m_tow_radius;     // default: 4.0 (meters)
-  // Range requested from ObstacleMgr in our OBM_ALERT_REQUEST
-  double       m_src_range;      // default: 2000 (meters)
-  // "name=" prefix used when requesting alerts from ObstacleMgr
-  std::string  m_src_name;       // default: "tow"
-  // Optional viewer overlay for the grown hulls
-  bool         m_post_tow_view;  // default: false
-  std::string  m_tow_view_color; // default: "yellow"
-  // --------------------------------------------------------------------------
-
- private: // State variables
+  
+  
+private: // State variables
   double m_nav_x;
   double m_nav_y;
-  double m_towed_x;
-  double m_towed_y;
   
   double m_min_dist_ever;
   
@@ -158,6 +136,19 @@ class TowObstacleMgr : public AppCastingMOOSApp
   
   std::map<std::string, Obstacle> m_map_obstacles;
 
+  //Towing specific additions
+  // Tow awareness
+  bool   m_use_tow;
+  bool   m_tow_deployed;
+  double m_towed_x;
+  double m_towed_y;
+
+  // Cable distance approximation
+  bool   m_use_tow_cable;
+  double m_cable_sample_step;     // meters (e.g., 0.5 or 1.0)
+
+  // Optional safety pad (meters)
+  double m_tow_pad;
 
 protected: // Rel 24.8.x For users using cmgr for dis/enabling bhvs
  
