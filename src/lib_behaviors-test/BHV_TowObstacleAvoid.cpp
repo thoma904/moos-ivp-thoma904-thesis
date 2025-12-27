@@ -1,7 +1,7 @@
 /************************************************************/
-/*    NAME: Tom Monaghan                                              */
+/*    NAME: Tom Monaghan                                    */
 /*    ORGN: MIT                                             */
-/*    FILE: BHV_TowObstacleAvoid.cpp                                    */
+/*    FILE: BHV_TowObstacleAvoid.cpp                        */
 /*    DATE:                                                 */
 /************************************************************/
 
