@@ -168,11 +168,13 @@ ProcessConfig = pTowObstacleMgr
 
 	general_alert = update_var=GEN_ALERT, alert_range=40000
 
+  max_age_per_point = 120
+
   //Tow Specific Additions
-  use_tow = false
-  use_tow_cable = false
-  cable_sample_step = 0
-  tow_pad = 0
+  use_tow = true
+  use_tow_cable = true
+  cable_sample_step = 1
+  tow_pad = 0.5
 	
 } 
 
