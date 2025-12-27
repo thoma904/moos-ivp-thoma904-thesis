@@ -150,6 +150,9 @@ private: // State variables
   // Optional safety pad (meters)
   double m_tow_pad;
 
+  double m_repost_interval; // seconds (0 = off)
+  std::map<std::string, double> m_last_post_time;
+
 protected: // Rel 24.8.x For users using cmgr for dis/enabling bhvs
  
   std::string  m_disable_var;

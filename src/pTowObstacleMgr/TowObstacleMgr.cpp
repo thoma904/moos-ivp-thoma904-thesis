@@ -1,7 +1,7 @@
 /************************************************************/
-/*    NAME: Tom Monaghan                                              */
+/*    NAME: Tom Monaghan                                    */
 /*    ORGN: MIT, Cambridge MA                               */
-/*    FILE: TowObstacleMgr.cpp                                          */
+/*    FILE: TowObstacleMgr.cpp                              */
 /*    DATE: December 29th, 1963                             */
 /************************************************************/
 
@@ -84,6 +84,8 @@ TowObstacleMgr::TowObstacleMgr()
   m_use_tow_cable = true;
   m_cable_sample_step = 1.0;
   m_tow_pad = 0.0;
+
+  m_repost_interval = 1.0; // 1 Hz keepalive (tune as needed)
 }
 
 //---------------------------------------------------------
@@ -275,6 +277,8 @@ bool TowObstacleMgr::OnStartUp()
       handled = setPosDoubleOnString(m_cable_sample_step, value);
     else if(param == "tow_pad")
       handled = setDoubleOnString(m_tow_pad, value);
+    else if(param == "repost_interval")
+      handled = setNonNegDoubleOnString(m_repost_interval, value);
 
     if(!handled)
       reportUnhandledConfigWarning(orig);
@@ -842,22 +846,36 @@ void TowObstacleMgr::postConvexHullUpdates()
 	//reportEvent("OBM_DIST_TO_OBJ="+msg);
       }
 
-      // Only post obstacle hull if it has changed.
-      if(m_map_obstacles[key].hasChanged()) {
+      bool changed = m_map_obstacles[key].hasChanged();
 
-	// At this point we're committed to posting an update so go ahead 
-	// and mark this obstacle key as NOT changed.
-	m_map_obstacles[key].setChanged(false);
-	m_map_obstacles[key].incUpdatesTotal();
+      // Keepalive if close and enough time has passed
+      bool keepalive = false;
+      if(close_range && (m_repost_interval > 0)) {
+        double last = -1;
+        if(m_last_post_time.count(key))
+          last = m_last_post_time[key];
 
+        if((last < 0) || ((m_curr_time - last) >= m_repost_interval))
+          keepalive = true;
+      }
 
+      if(changed || keepalive) {
 
-	// Only post hull if ownship is w/in alert range
-	if(close_range)
-	  postConvexHullUpdate(key, m_alert_var, m_alert_name);
-	if((m_gen_alert_var != "") && (dist <= m_gen_alert_range))
-	  postConvexHullUpdate(key, m_gen_alert_var, m_gen_alert_name);
-      }      
+        // Only clear changed for real changes
+        if(changed) {
+          m_map_obstacles[key].setChanged(false);
+          m_map_obstacles[key].incUpdatesTotal();
+        }
+
+        if(close_range)
+          postConvexHullUpdate(key, m_alert_var, m_alert_name);
+
+        if((m_gen_alert_var != "") && (dist <= m_gen_alert_range))
+          postConvexHullUpdate(key, m_gen_alert_var, m_gen_alert_name);
+
+        m_last_post_time[key] = m_curr_time;
+      }
+ 
     }
   }
 }
@@ -1025,6 +1043,30 @@ void TowObstacleMgr::manageMemory()
     bool remove = p->second.pruneByAge(m_max_age_per_point, m_curr_time);
     if(p->second.getPoly().active() == false)
       remove = true;
+
+    if(remove) 
+    {
+      // Tow/system-aware hold: keep stale point-obstacles around long
+      // enough for the tow to catch up.
+      if(m_use_tow && m_tow_deployed && !p->second.isGiven()) {
+
+        XYPolygon poly = p->second.getPoly();
+        if(poly.is_convex() && (poly.size() >= 3)) {
+          double d_nav, d_tow, d_cable;
+          double d_sys = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
+          d_sys = std::max(0.0, d_sys - m_tow_pad);
+
+          double tow_len = hypot(m_nav_x - m_towed_x, m_nav_y - m_towed_y);
+
+          // Hold obstacles within this expanded "system concern" range
+          double hold_range = std::max(m_alert_range, tow_len + m_alert_range);
+
+          if(d_sys <= hold_range)
+            remove = false;
+        }
+      }
+    }
+
 
     if(remove)
       keys_to_forget.insert(key);
