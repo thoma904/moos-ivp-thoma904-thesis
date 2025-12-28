@@ -114,9 +114,9 @@ Behavior = BHV_StationKeep
 }
 
 //----------------------------------------------
-Behavior=BHV_AvoidObstacleV24
+Behavior=BHV_TowObstacleAvoid
 {
-  name       = avdobs24_
+  name       = towavdobs
   pwt        = 1000
   condition  = DEPLOY = true
 	templating = spawn
@@ -136,4 +136,9 @@ Behavior=BHV_AvoidObstacleV24
 	
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
+
+  use_tow = true
+  use_tow_cable = true   // if you want cable sampling
+  cable_sample_step = 1.0
+  tow_pad = 0
 }
