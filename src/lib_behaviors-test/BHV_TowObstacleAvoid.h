@@ -46,6 +46,10 @@ protected: // Local Utility functions
   bool   applyBuffer();
   IvPFunction* buildOF();
 
+  //Tow Specific Utilities
+  double computeRangeRelevanceFromRange(double range) const;
+
+
 protected:
   ObShipModelV24 m_obship_model;
 
@@ -65,6 +69,12 @@ protected: // Configuration parameters
 
   bool m_holonomic_ok;
 
+  //Tow Specific Additions
+  bool   m_use_tow;
+  double m_tow_pad;
+  bool   m_use_tow_cable;
+  double m_cable_sample_step;
+
 protected: // State variables
   double  m_obstacle_relevance;
   bool    m_resolved_pending;
@@ -80,6 +90,20 @@ protected: // State variables
   std::string m_side_lock;
 
   bool m_allstop_on_breach;
+
+  //Tow Specific State Variables
+  // Tow state
+  double m_towed_x;
+  double m_towed_y;
+  bool   m_tow_deployed;
+
+  // Cached ranges (nav vs tow vs system=min)
+  double      m_rng_sys;
+  double      m_rng_nav;
+  double      m_rng_tow;
+  std::string m_rng_src;
+  double m_rng_cable;
+
   
 protected:
   HintHolder m_hints;

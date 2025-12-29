@@ -8,6 +8,7 @@
 #include <iostream>
 #include <cmath> 
 #include <cstdlib>
+#include <algorithm> //added
 #include "BHV_TowObstacleAvoid.h"
 #include "AOF_AvoidObstacleV24.h"
 #include "OF_Reflector.h"
@@ -19,6 +20,7 @@
 #include "RefineryObAvoidV24.h"
 #include "XYFormatUtilsPoly.h"
 #include "VarDataPairUtils.h"
+#include "XYPoint.h" //added
 
 using namespace std;
 
@@ -55,9 +57,28 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_holonomic_ok = false;
 
   m_allstop_on_breach = true;
+
+  //Tow Specific Additions
+  
+  // Tow integration
+  m_use_tow      = false;
+  m_tow_pad      = 0.0;
+  m_tow_deployed = false;
+  m_towed_x      = 0;
+  m_towed_y      = 0;
+  m_use_tow_cable = false;
+  m_cable_sample_step = 1.0;
+
+  // Cached ranges
+  m_rng_sys = -1;
+  m_rng_nav = -1;
+  m_rng_tow = -1;
+  m_rng_src = "nav";
+  m_rng_cable = -1;
   
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
+  addInfoVars("TOWED_X, TOWED_Y, TOW_DEPLOYED"); //added
   addInfoVars(m_resolved_obstacle_var);
 }
 
@@ -158,6 +179,27 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if(param == "allstop_on_breach") 
     return(setBooleanOnString(m_allstop_on_breach, val));
+
+  //Tow Specific
+  else if(param == "use_tow")
+    return(setBooleanOnString(m_use_tow, val));
+
+  else if((param == "tow_pad") && non_neg_number) {
+    m_tow_pad = dval;
+    return(true);
+  }
+
+  else if(param == "use_tow_cable")
+    return(setBooleanOnString(m_use_tow_cable, val));
+
+  else if((param == "cable_sample_step") && non_neg_number) {
+    if(dval <= 0)
+      return(false);
+    m_cable_sample_step = dval;
+    return(true);
+  }
+
+
   else
     return(false);
 
@@ -281,7 +323,84 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   if(!m_valid_cn_obs_info)
     return;
 
+  //double os_range_to_poly = m_obship_model.getRange();
+  
+  // =================================================================
+  // Tow/Cable Specific: Compute range based on tow status
+
+  // Default: nav-only range (whatever ObShipModel uses internally)
   double os_range_to_poly = m_obship_model.getRange();
+
+  // We'll use gut_poly for tow/cable distance checks
+  XYPolygon gut_poly = m_obship_model.getGutPoly();
+
+  // Cache defaults
+  m_rng_nav   = os_range_to_poly;
+  m_rng_tow   = os_range_to_poly;
+  m_rng_cable = os_range_to_poly;
+  m_rng_sys   = os_range_to_poly;
+  m_rng_src   = "nav";
+  m_tow_deployed = false;
+
+  if(m_use_tow) {
+    bool okx=true, oky=true, okd=true;
+    m_towed_x = getBufferDoubleVal("TOWED_X", okx);
+    m_towed_y = getBufferDoubleVal("TOWED_Y", oky);
+    string dep = tolower(getBufferStringVal("TOW_DEPLOYED", okd));
+    m_tow_deployed = (dep == "true") || (dep == "yes") || (dep == "1");
+
+    if(okx && oky && okd && m_tow_deployed) {
+
+      // Tow range (tow body point)
+      m_rng_tow = gut_poly.dist_to_poly(m_towed_x, m_towed_y);
+
+      // Cable range (sample along NAV -> TOWED segment)
+      if(m_use_tow_cable) {
+        // Cable start: use NAV/ownship position. (If you later publish hook/anchor, swap here.)
+        double x1 = m_obship_model.getOSX();
+        double y1 = m_obship_model.getOSY();
+        double x2 = m_towed_x;
+        double y2 = m_towed_y;
+
+        double seg_len = hypot(x2 - x1, y2 - y1);
+        unsigned int samples = 1;
+
+        if(m_cable_sample_step > 0.1)
+          samples = (unsigned int)ceil(seg_len / m_cable_sample_step);
+        if(samples < 1) samples = 1;
+
+        m_rng_cable = 1e9;
+        for(unsigned int i=0; i<=samples; i++) {
+          double t  = (double)i / (double)samples;
+          double xs = x1 + t*(x2-x1);
+          double ys = y1 + t*(y2-y1);
+          double di = gut_poly.dist_to_poly(xs, ys);
+          if(di < m_rng_cable)
+            m_rng_cable = di;
+        }
+      }
+
+      // System range = min(nav, tow, cable) - pad
+      double dmin = m_rng_nav;
+      m_rng_src = "nav";
+
+      if(m_rng_tow < dmin) {
+        dmin = m_rng_tow;
+        m_rng_src = "tow";
+      }
+
+      if(m_rng_cable < dmin) {
+        dmin = m_rng_cable;
+        m_rng_src = "cable";
+      }
+
+      m_rng_sys = std::max(0.0, dmin - m_tow_pad);
+      os_range_to_poly = m_rng_sys;
+    }
+  }
+
+  // =================================================================
+
   if((m_cpa_rng_ever < 0) || (os_range_to_poly < m_cpa_rng_ever))
     m_cpa_rng_ever = os_range_to_poly;
   m_cpa_reported = m_cpa_rng_ever;
@@ -388,10 +507,20 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
 
   m_obship_model.setCachedVals();
 
-  // Part 2: No IvP function if obstacle is aft
+  /*// Part 2: No IvP function if obstacle is aft
   if(m_obship_model.isObstacleAft(20)) {
     return(0);
+  }*/
+
+  // =================================================================
+  //Tow Specific: Keep running if obstacle aft
+  if(m_obship_model.isObstacleAft(20)) 
+  {
+    if(!(m_use_tow && m_tow_deployed && ((m_rng_src == "tow") || (m_rng_src == "cable"))))
+      return(0);
   }
+
+  // =================================================================
   
   // Part 3: Determine the relevance
   m_obstacle_relevance = getRelevance();
@@ -491,7 +620,17 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
 double BHV_TowObstacleAvoid::getRelevance()
 {
   // Let the ObShipModel tell us the raw range relevance
+  //double range_relevance = m_obship_model.getRangeRelevance();
+
+  // =================================================================
+  // Tow Specific
   double range_relevance = m_obship_model.getRangeRelevance();
+
+  // If tow is deployed, base relevance on the tow-aware system range
+  if(m_use_tow && m_tow_deployed && (m_rng_sys >= 0))
+    range_relevance = computeRangeRelevanceFromRange(m_rng_sys);
+  // =================================================================
+
   if(range_relevance <= 0)
     return(0);
 
@@ -587,6 +726,15 @@ void BHV_TowObstacleAvoid::postErasablePolygons()
   rim_poly.set_color("fill", "invisible");
   postMessage("VIEW_POLYGON", rim_poly.get_spec_inactive(), "rim");
 
+  // =================================================
+  // Tow Specific: Erase tow point
+  
+  // Erase tow point
+  XYPoint towpt(0,0);
+  towpt.set_label("tow_" + m_descriptor);
+  postMessage("VIEW_POINT", towpt.get_spec_inactive(), "tow");
+  
+  // =================================================
   
 }
 
@@ -683,8 +831,20 @@ string BHV_TowObstacleAvoid::expandMacros(string sdata)
   // =======================================================
   // Then expand the macros unique to this behavior
   // =======================================================
+  /*if(strContains(sdata, "$[RNG]"))
+    sdata = macroExpand(sdata, "RNG", m_obship_model.getRange());*/
+
+  // =======================================================
+  // Tow Specific
+
+    double rng = m_obship_model.getRange();
+  if(m_use_tow && m_tow_deployed && (m_rng_sys >= 0))
+    rng = m_rng_sys;
+
   if(strContains(sdata, "$[RNG]"))
-    sdata = macroExpand(sdata, "RNG", m_obship_model.getRange());
+    sdata = macroExpand(sdata, "RNG", rng);
+
+  // =======================================================
     
   if(strContains(sdata, "$[BNG]"))
     sdata = macroExpand(sdata, "BNG", m_obship_model.getObcentBng());
@@ -806,4 +966,21 @@ bool BHV_TowObstacleAvoid::applyAbleFilter(string str)
     setComplete();
   
   return(true);
+}
+
+double BHV_TowObstacleAvoid::computeRangeRelevanceFromRange(double range) const
+{
+  double inner = m_obship_model.getPwtInnerDist();
+  double outer = m_obship_model.getPwtOuterDist();
+
+  if(outer <= inner)
+    outer = inner + 0.001;
+
+  if(range >= outer)
+    return(0);
+
+  if(range <= inner)
+    return(1);
+
+  return((outer - range) / (outer - inner));  // linear ramp
 }
