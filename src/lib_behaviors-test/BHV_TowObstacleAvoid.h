@@ -8,7 +8,6 @@
 #ifndef TowObstacleAvoid_HEADER
 #define TowObstacleAvoid_HEADER
 
-#include <string>
 #include "IvPBehavior.h"
 #include "ObShipModelV24.h"
 #include "XYPolygon.h"
@@ -66,12 +65,6 @@ protected: // Configuration parameters
 
   bool m_holonomic_ok;
 
-  // Tow config
-  bool   m_use_tow;
-  bool   m_use_tow_cable;
-  double m_cable_sample_step;
-  double m_tow_pad;
-
 protected: // State variables
   double  m_obstacle_relevance;
   bool    m_resolved_pending;
@@ -87,24 +80,6 @@ protected: // State variables
   std::string m_side_lock;
 
   bool m_allstop_on_breach;
-
-  // Tow state
-  double m_towed_x;
-  double m_towed_y;
-  bool   m_tow_deployed;
-
-  // System range cache
-  double      m_rng_sys;
-  double      m_rng_nav;
-  double      m_rng_tow;
-  double      m_rng_cable;
-  std::string m_rng_src;
-
-  // Helpers
-  double computeTowAwareRange(const XYPolygon& poly,
-                              double& d_nav, double& d_tow, double& d_cable,
-                              std::string& src);
-  double computeRangeRelevanceFromRange(double range) const;
   
 protected:
   HintHolder m_hints;

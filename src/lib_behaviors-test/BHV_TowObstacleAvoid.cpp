@@ -5,11 +5,9 @@
 /*    DATE:                                                 */
 /************************************************************/
 
-#include <iterator>
 #include <iostream>
 #include <cmath> 
 #include <cstdlib>
-#include <algorithm>
 #include "BHV_TowObstacleAvoid.h"
 #include "AOF_AvoidObstacleV24.h"
 #include "OF_Reflector.h"
@@ -30,7 +28,7 @@ using namespace std;
 BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   IvPBehavior(gdomain)
 {
-  this->setParam("descriptor", "towavdobs");
+   this->setParam("descriptor", "towobsavoid");
   m_domain = subDomain(m_domain, "course,speed");
 
   // Initialize config vars
@@ -57,28 +55,9 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_holonomic_ok = false;
 
   m_allstop_on_breach = true;
-
-  // Tow/cable integration (config)
-  m_use_tow           = false;
-  m_use_tow_cable     = true;
-  m_cable_sample_step = 1.0;
-  m_tow_pad           = 0.0;
-
-  // Tow/cable integration (state)
-  m_towed_x      = 0;
-  m_towed_y      = 0;
-  m_tow_deployed = false;
-
-  // Cached system range info
-  m_rng_sys   = -1;
-  m_rng_nav   = -1;
-  m_rng_tow   = -1;
-  m_rng_cable = -1;
-  m_rng_src   = "nav";
   
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
-  addInfoVars("TOW_DEPLOYED, TOWED_X, TOWED_Y");
   addInfoVars(m_resolved_obstacle_var);
 }
 
@@ -179,33 +158,6 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if(param == "allstop_on_breach") 
     return(setBooleanOnString(m_allstop_on_breach, val));
-
-  // Tow/cable behavior config
-  else if(param == "use_tow")
-    return(setBooleanOnString(m_use_tow, val));
-
-  else if(param == "use_tow_cable")
-    return(setBooleanOnString(m_use_tow_cable, val));
-
-  else if((param == "cable_sample_step") && non_neg_number) {
-    if(dval <= 0)
-      return(false);
-    m_cable_sample_step = dval;
-    return(true);
-  }
-
-  else if((param == "tow_pad") && non_neg_number) {
-    m_tow_pad = dval;
-    return(true);
-  }
-
-  // IMPORTANT: accept TowObstacleMgr update fields so spawning never fails
-  else if((param == "dist_sys")   ||
-          (param == "dist_nav")   ||
-          (param == "dist_tow")   ||
-          (param == "dist_cable"))
-    return(true);
-
   else
     return(false);
 
@@ -268,8 +220,7 @@ void BHV_TowObstacleAvoid::onSetParamComplete()
 
 void BHV_TowObstacleAvoid::onHelmStart()
 {
-    if(isDynamicallySpawnable() && (m_update_var != "")) 
-  {
+  if(isDynamicallySpawnable() && (m_update_var != "")) {
     double pwt_outer_dist = m_obship_model.getPwtOuterDist();
     string alert_request = "name=" + m_descriptor;
     alert_request += ",update_var=" + m_update_var;
@@ -330,33 +281,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   if(!m_valid_cn_obs_info)
     return;
 
-  // Default: nav-only range
   double os_range_to_poly = m_obship_model.getRange();
-
-  // Initialize system range cache
-  m_rng_nav   = os_range_to_poly;
-  m_rng_tow   = os_range_to_poly;
-  m_rng_cable = os_range_to_poly;
-  m_rng_sys   = os_range_to_poly;
-  m_rng_src   = "nav";
-  m_tow_deployed = false;
-
-  // If tow enabled, read tow state and compute system range
-  if(m_use_tow) {
-    bool okx=true, oky=true, okd=true;
-    m_towed_x = getBufferDoubleVal("TOWED_X", okx);
-    m_towed_y = getBufferDoubleVal("TOWED_Y", oky);
-    string dep = tolower(getBufferStringVal("TOW_DEPLOYED", okd));
-    m_tow_deployed = (dep == "true") || (dep == "yes") || (dep == "1");
-
-    if(m_tow_deployed) {
-      XYPolygon gut_poly = m_obship_model.getGutPoly();
-      m_rng_sys = computeTowAwareRange(gut_poly, m_rng_nav, m_rng_tow,
-                                       m_rng_cable, m_rng_src);
-      os_range_to_poly = m_rng_sys;  // Use system range from here on
-    }
-  }
-
   if((m_cpa_rng_ever < 0) || (os_range_to_poly < m_cpa_rng_ever))
     m_cpa_rng_ever = os_range_to_poly;
   m_cpa_reported = m_cpa_rng_ever;
@@ -453,7 +378,7 @@ void BHV_TowObstacleAvoid::onIdleToRunState()
 
 IvPFunction* BHV_TowObstacleAvoid::onRunState()
 {
-  // Part 1: Handle if obstacle has been resolved
+ // Part 1: Handle if obstacle has been resolved
   if(m_resolved_pending) {
     setComplete();
     return(0);
@@ -465,11 +390,8 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
 
   // Part 2: No IvP function if obstacle is aft
   if(m_obship_model.isObstacleAft(20)) {
-    // If the cable/tow is what is close (not nav), we may still need to act
-    if(!(m_use_tow && m_tow_deployed && (m_rng_src != "nav")))
-      return(0);
+    return(0);
   }
-
   
   // Part 3: Determine the relevance
   m_obstacle_relevance = getRelevance();
@@ -506,7 +428,7 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
 
 IvPFunction *BHV_TowObstacleAvoid::buildOF()
 {
-  // Part 1: Set and init the AOF
+    // Part 1: Set and init the AOF
   AOF_AvoidObstacleV24  aof_avoid(m_domain);
   aof_avoid.setObShipModel(m_obship_model);
   bool ok_init = aof_avoid.initialize();
@@ -570,11 +492,6 @@ double BHV_TowObstacleAvoid::getRelevance()
 {
   // Let the ObShipModel tell us the raw range relevance
   double range_relevance = m_obship_model.getRangeRelevance();
-
-    // If tow is deployed, base relevance on the tow-aware system range
-  if(m_use_tow && m_tow_deployed && (m_rng_sys >= 0))
-    range_relevance = computeRangeRelevanceFromRange(m_rng_sys);
-
   if(range_relevance <= 0)
     return(0);
 
@@ -707,7 +624,7 @@ bool BHV_TowObstacleAvoid::updatePlatformInfo()
 
 void BHV_TowObstacleAvoid::postConfigStatus()
 {
-  string str = "type=BHV_TowObstacleAvoid,name=" + m_descriptor;
+  string str = "type=BHV_AvoidObstacleV24,name=" + m_descriptor;
 
   double pwt_inner_dist = m_obship_model.getPwtInnerDist();
   double pwt_outer_dist = m_obship_model.getPwtOuterDist();
@@ -766,13 +683,8 @@ string BHV_TowObstacleAvoid::expandMacros(string sdata)
   // =======================================================
   // Then expand the macros unique to this behavior
   // =======================================================
-  double rng = m_obship_model.getRange();
-  if(m_use_tow && m_tow_deployed && (m_rng_sys >= 0))
-    rng = m_rng_sys;
-
   if(strContains(sdata, "$[RNG]"))
-    sdata = macroExpand(sdata, "RNG", rng);
-
+    sdata = macroExpand(sdata, "RNG", m_obship_model.getRange());
     
   if(strContains(sdata, "$[BNG]"))
     sdata = macroExpand(sdata, "BNG", m_obship_model.getObcentBng());
@@ -894,88 +806,4 @@ bool BHV_TowObstacleAvoid::applyAbleFilter(string str)
     setComplete();
   
   return(true);
-}
-
-double BHV_TowObstacleAvoid::computeRangeRelevanceFromRange(double range) const
-{
-  double inner = m_obship_model.getPwtInnerDist();
-  double outer = m_obship_model.getPwtOuterDist();
-
-  if(outer <= inner)
-    outer = inner + 0.001;
-
-  if(range >= outer)
-    return(0);
-
-  if(range <= inner)
-    return(1);
-
-  return((outer - range) / (outer - inner));  // linear ramp
-}
-
-double BHV_TowObstacleAvoid::computeTowAwareRange(const XYPolygon& poly,
-                                                 double& d_nav,
-                                                 double& d_tow,
-                                                 double& d_cable,
-                                                 std::string& src)
-{
-  double osx = m_obship_model.getOSX();
-  double osy = m_obship_model.getOSY();
-
-  d_nav   = poly.dist_to_poly(osx, osy);
-  d_tow   = d_nav;
-  d_cable = d_nav;
-  src     = "nav";
-
-  // If tow not active, system distance is nav distance
-  if(!(m_use_tow && m_tow_deployed)) {
-    return(std::max(0.0, d_nav - m_tow_pad));
-  }
-
-  // Distance from towed body to obstacle
-  d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
-
-  // Distance from sampled points along cable segment to obstacle
-  if(m_use_tow_cable) {
-    double x1 = osx;
-    double y1 = osy;
-    double x2 = m_towed_x;
-    double y2 = m_towed_y;
-
-    double seg_len = hypot(x2 - x1, y2 - y1);
-    unsigned int samples = 1;
-
-    if(m_cable_sample_step > 0.05)
-      samples = (unsigned int)ceil(seg_len / m_cable_sample_step);
-
-    if(samples < 1)
-      samples = 1;
-
-    d_cable = 1e9;
-    for(unsigned int i=0; i<=samples; i++) {
-      double t  = (double)i / (double)samples;
-      double xs = x1 + t*(x2 - x1);
-      double ys = y1 + t*(y2 - y1);
-      double di = poly.dist_to_poly(xs, ys);
-      if(di < d_cable)
-        d_cable = di;
-    }
-  }
-
-  // System distance is the minimum of nav/tow/cable
-  double d_sys = d_nav;
-  if(d_tow < d_sys)   d_sys = d_tow;
-  if(d_cable < d_sys) d_sys = d_cable;
-
-  // Identify which part was limiting
-  if((d_cable <= d_tow) && (d_cable <= d_nav))
-    src = "cable";
-  else if(d_tow <= d_nav)
-    src = "tow";
-  else
-    src = "nav";
-
-  // Apply pad once here
-  d_sys = std::max(0.0, d_sys - m_tow_pad);
-  return(d_sys);
 }
