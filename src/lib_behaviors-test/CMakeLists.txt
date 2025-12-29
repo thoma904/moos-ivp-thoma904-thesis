@@ -115,14 +115,22 @@ TARGET_LINK_LIBRARIES(BHV_TowSafety
 #                                      BHV_TowObstacleAvoid
 #--------------------------------------------------------
 ADD_LIBRARY(BHV_TowObstacleAvoid SHARED 
-   BHV_TowObstacleAvoid.cpp)
+   BHV_TowObstacleAvoid.cpp AOF_AvoidObstacleV24.cpp)
 TARGET_LINK_LIBRARIES(BHV_TowObstacleAvoid
-   helmivp
-   behaviors 
+   mbutil
+   geometry
+   bhvutil    
+   behaviors
+   helmivp 
    ivpbuild 
    logic 
-   ivpcore 
-   bhvutil 
-   mbutil 
-   geometry 
+   ivpcore
+   mbutil
+   geometry
+   bhvutil    
+   behaviors
+   helmivp 
+   ivpbuild 
+   logic 
+   ivpcore  
    ${SYSTEM_LIBS} )
