@@ -49,8 +49,6 @@ ProcessConfig = pHelmIvP
   verbose   = false
   domain    = course:0:359:360
   domain    = speed:0:$(MAX_SPD):delta=0.1
-
-	app_logging = true
 	
 	pmgen = alg=dubins # radius=$(MODEL_RAD) # degs=10
 }
