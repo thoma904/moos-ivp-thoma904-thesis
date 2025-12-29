@@ -115,7 +115,7 @@ TARGET_LINK_LIBRARIES(BHV_TowSafety
 #                                      BHV_TowObstacleAvoid
 #--------------------------------------------------------
 ADD_LIBRARY(BHV_TowObstacleAvoid SHARED 
-   BHV_TowObstacleAvoid.cpp AOF_AvoidObstacleV24.cpp)
+   BHV_TowObstacleAvoid.cpp AOF_TowObstacleAvoid.cpp)
 TARGET_LINK_LIBRARIES(BHV_TowObstacleAvoid
    mbutil
    geometry
