@@ -519,39 +519,47 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
 
 IvPFunction *BHV_TowObstacleAvoid::buildOF()
 {
-    // Part 1: Set and init the AOF
-  AOF_TowObstacleAvoid  aof_avoid(m_domain);
+  AOF_TowObstacleAvoid aof_avoid(m_domain);
   aof_avoid.setObShipModel(m_obship_model);
+
+  // ---------------------------------------------------------
+  // NEW: Pass tow info into the AOF so the IPF considers tow CPA
+  // ---------------------------------------------------------
+  if(m_use_tow && m_tow_deployed) {
+    aof_avoid.setTowEval(true);
+
+    // If you later want to use measured tow heading, read TOWED_HEADING
+    // and pass it here. For the "shifted obstacle" method, hdg is not required.
+    aof_avoid.setTowPose(m_towed_x, m_towed_y, 0.0);
+  }
+  else {
+    aof_avoid.setTowEval(false);
+  }
+  // ---------------------------------------------------------
+
   bool ok_init = aof_avoid.initialize();
   if(!ok_init) {
     string aof_msg = aof_avoid.getCatMsgsAOF();
-    postWMessage("Unable to init AOF_TowObstacleAvoid:"+aof_msg);
+    postWMessage("Unable to init AOF_TowObstacleAvoid:" + aof_msg);
     return(0);
   }
-  
-  // Part 2: Build the actual objective function with reflector
+
   OF_Reflector reflector(&aof_avoid, 1);
 
-  // ===========================================================
-  // Utilize the Refinery to identify plateau, and basin regions
-  // ===========================================================
   if(m_use_refinery) {
     RefineryObAvoidV24 refinery(m_domain);
-    //refinery.setVerbose(true);
     refinery.setSideLock(m_side_lock);
     refinery.setRefineRegions(m_obship_model);
 
     vector<IvPBox> plateau_regions = refinery.getPlateaus();
     vector<IvPBox> basin_regions   = refinery.getBasins();
 
-    for(unsigned int i=0; i<plateau_regions.size(); i++) 
+    for(unsigned int i=0; i<plateau_regions.size(); i++)
       reflector.setParam("plateau_region", plateau_regions[i]);
     for(unsigned int i=0; i<basin_regions.size(); i++)
-      reflector.setParam("basin_region", basin_regions[i]);   
+      reflector.setParam("basin_region", basin_regions[i]);
   }
 
-  
-  
   if(m_build_info != "")
     reflector.create(m_build_info);
   else {
@@ -559,13 +567,13 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     reflector.setParam("uniform_grid",  "discrete@course:9,speed:9");
     reflector.create();
   }
+
   if(!reflector.stateOK()) {
     postWMessage(reflector.getWarnings());
     return(0);
   }
 
-  // Part 3: Extract IPF, apply priority, post visuals
-  IvPFunction *ipf = reflector.extractIvPFunction(true); // true normalize
+  IvPFunction *ipf = reflector.extractIvPFunction(true);
   if(ipf) {
     ipf->setPWT(m_obstacle_relevance * m_priority_wt);
     postViewablePolygons();

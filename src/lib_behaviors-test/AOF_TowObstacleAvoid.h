@@ -49,8 +49,21 @@ public:
   void   setObShipModel(ObShipModelV24 obm) {m_obship_model=obm;}
   bool   initialize();
 
+  // Tow-specific methods
+  void   setTowPose(double x, double y, double hdg);
+  void   setTowEval(bool v) {m_tow_eval = v;}
+
  private: // Config variables
   ObShipModelV24 m_obship_model;
+
+  ObShipModelV24 m_obship_model_tow; // Tow-shifted obstacle model
+  bool m_tow_eval;
+  double m_tow_x;
+  double m_tow_y;
+  double m_tow_hdg;
+  bool m_tow_pose_set;
+  bool m_tow_model_ready;
+  bool m_tow_breached;
 
  private: // State variables
   int    m_crs_ix;  // Index of "course" variable in IvPDomain
