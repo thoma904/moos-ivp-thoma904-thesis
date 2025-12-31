@@ -52,6 +52,7 @@ public:
   // Tow-specific methods
   void   setTowPose(double x, double y, double hdg);
   void   setTowEval(bool v) {m_tow_eval = v;}
+  void setTowOnly(bool v) { m_tow_only = v; }
 
  private: // Config variables
   ObShipModelV24 m_obship_model;
@@ -64,6 +65,7 @@ public:
   bool m_tow_pose_set;
   bool m_tow_model_ready;
   bool m_tow_breached;
+  bool m_tow_only;
 
  private: // State variables
   int    m_crs_ix;  // Index of "course" variable in IvPDomain

@@ -170,7 +170,7 @@ ProcessConfig = pTowObstacleMgr
 
   //Tow Specific Additions
   use_tow = true
-  use_tow_cable = true
+  use_tow_cable = false
   cable_sample_step = 1
   tow_pad = 0.5
 	

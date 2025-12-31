@@ -31,6 +31,7 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_tow_model_ready = false;
   m_tow_breached    = false;
+  m_tow_only       = false;
 }
 
 //----------------------------------------------------------------
@@ -86,8 +87,13 @@ bool AOF_TowObstacleAvoid::initialize()
     return(postMsgAOF("m_obstacle is not convex"));
 
   // Standard: fail if ownship starts inside gut
-  if(m_obship_model.ownshipInGutPoly())
-    return(postMsgAOF("m_obstacle contains osx,osy"));
+  // If we're NOT tow-only, keep the original behavior: ownship cannot be in gut.
+  if(!(m_tow_eval && m_tow_only)) {
+    if(m_obship_model.ownshipInGutPoly())
+      return(postMsgAOF("m_obstacle contains osx,osy"));
+  }
+  // If tow-only: ownship may be in the gut poly, that's OK.
+
 
   // --- Tow model build ---
   m_tow_model_ready = false;
@@ -139,20 +145,33 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   m_domain.getVal(m_crs_ix, b->pt(m_crs_ix,0), eval_crs);
   m_domain.getVal(m_spd_ix, b->pt(m_spd_ix,0), eval_spd);
 
-  // NAV utility
+  // If tow is enabled and we're tow-only, don't even evaluate nav.
+  if(m_tow_eval && m_tow_only) {
+
+    // Tow model not ready -> neutral (or min). I'd recommend neutral==knownMax
+    // so the behavior doesn't distort decisions when tow isn't actually active.
+    if(!m_tow_pose_set || !m_tow_model_ready)
+      return(getKnownMax());
+
+    // If tow is already in gut, you can decide policy:
+    // - strict: return min (all decisions bad)
+    // - recover: still evaluate u_tow and let it try to improve (often still flat)
+    if(m_tow_breached)
+      return(getKnownMin());
+
+    double u_tow = m_obship_model_tow.evalHdgSpd(eval_crs, eval_spd);
+    return(u_tow);
+  }
+
+  // Otherwise (not tow-only): original behavior
   double u_nav = m_obship_model.evalHdgSpd(eval_crs, eval_spd);
 
-  // If tow not enabled, return nav utility
   if(!m_tow_eval || !m_tow_pose_set || !m_tow_model_ready)
     return(u_nav);
 
-  // If tow is already in gut, treat as worst-case (forces allstop upstream)
   if(m_tow_breached)
     return(getKnownMin());
 
-  // Tow utility (using shifted obstacle model)
   double u_tow = m_obship_model_tow.evalHdgSpd(eval_crs, eval_spd);
-
-  // Conservative: worst dominates
   return((u_tow < u_nav) ? u_tow : u_nav);
 }

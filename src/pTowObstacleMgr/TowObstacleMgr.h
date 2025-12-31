@@ -142,6 +142,7 @@ private: // State variables
   bool   m_tow_deployed;
   double m_towed_x;
   double m_towed_y;
+  bool   m_tow_only;
 
   // Cable distance approximation
   bool   m_use_tow_cable;

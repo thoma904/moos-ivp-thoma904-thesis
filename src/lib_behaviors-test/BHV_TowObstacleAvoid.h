@@ -96,6 +96,17 @@ protected: // State variables
   double m_towed_x;
   double m_towed_y;
   bool   m_tow_deployed;
+  bool   m_tow_only;
+  bool   m_use_tow_lead;
+  double m_tow_lead_sec;
+
+  double m_last_tow_x;
+  double m_last_tow_y;
+  double m_last_tow_time;
+
+  double m_tow_x_eval;
+  double m_tow_y_eval;
+  double m_curr_time;
 
   // Cached ranges (nav vs tow vs system=min)
   double      m_rng_sys;

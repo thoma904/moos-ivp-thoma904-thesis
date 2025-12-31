@@ -88,7 +88,7 @@ Behavior = BHV_Waypoint
   wpt_dist_to_prev = DIST_TO_PREV
 
 	perpetual = true
-      speed = 1.2
+      speed = 0.5 //updated
      radius = 5.0
   nm_radius = 15.0
       point = 0,0
@@ -123,12 +123,12 @@ Behavior=BHV_TowObstacleAvoid
   updates    = OBSTACLE_ALERT
 
        use_refinery = true
-      allowable_ttc = 5 
+      allowable_ttc = 30
 	min_util_cpa_dist = 2.5
 	max_util_cpa_dist = 5
-     pwt_outer_dist = 15
+     pwt_outer_dist = 30
      pwt_inner_dist = 5
-     completed_dist = 15
+     completed_dist = 30
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
@@ -141,4 +141,5 @@ Behavior=BHV_TowObstacleAvoid
   use_tow_cable = false  // if you want cable sampling
   cable_sample_step = 1.0
   tow_pad = 0
+  tow_only = true
 }

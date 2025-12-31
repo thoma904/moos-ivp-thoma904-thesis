@@ -86,6 +86,7 @@ TowObstacleMgr::TowObstacleMgr()
   m_tow_pad = 0.0;
 
   m_repost_interval = 1.0; // 1 Hz keepalive (tune as needed)
+  m_tow_only = true;
 }
 
 //---------------------------------------------------------
@@ -134,9 +135,16 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       handled = true;
     }
     else if(key == "TOW_DEPLOYED") {
-      m_tow_deployed = (tolower(sval) == "true") || (tolower(sval) == "yes");
+      if(msg.IsDouble()) {
+        m_tow_deployed = (dval > 0.5);
+      }
+      else {
+        string dep = tolower(stripBlankEnds(sval));
+        m_tow_deployed = (dep=="true" || dep=="yes" || dep=="1");
+      }
       handled = true;
     }
+
 
     else if(key == "GIVEN_OBSTACLE") 
       handled = handleGivenObstacle(sval);
@@ -183,6 +191,18 @@ bool TowObstacleMgr::Iterate()
   updatePointHulls();
   updatePolyRanges();
   postConvexHullUpdates();
+
+  Notify("TOWMGR_TOW_DEPLOYED", m_tow_deployed ? "true" : "false");
+  Notify("TOWMGR_TOW_ONLY",     m_tow_only ? "true" : "false");
+
+  if(m_use_tow && m_tow_deployed) {
+    XYPoint towpt(m_towed_x, m_towed_y);
+    towpt.set_label("towmgr_tow");
+    towpt.set_color("vertex", "yellow");
+    towpt.set_vertex_size(4);
+    Notify("VIEW_POINT", towpt.get_spec());
+  }
+
 
   AppCastingMOOSApp::PostReport();
   return(true);
@@ -279,6 +299,9 @@ bool TowObstacleMgr::OnStartUp()
       handled = setDoubleOnString(m_tow_pad, value);
     else if(param == "repost_interval")
       handled = setNonNegDoubleOnString(m_repost_interval, value);
+
+    else if(param == "tow_only")
+      handled = setBooleanOnString(m_tow_only, value);
 
     if(!handled)
       reportUnhandledConfigWarning(orig);
@@ -1342,28 +1365,36 @@ bool TowObstacleMgr::buildReport()
 // Tow Cable Helper Function for calculating cable distance
 
 double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
-                                              double& d_nav,
-                                              double& d_tow,
-                                              double& d_cable) const
+                                             double& d_nav,
+                                             double& d_tow,
+                                             double& d_cable) const
 {
   d_nav   = poly.dist_to_poly(m_nav_x, m_nav_y);
-  d_tow   = d_nav;
-  d_cable = d_nav;
 
-  // If tow not enabled/valid, system distance is nav distance
-  if(!m_use_tow)
-    return(d_nav);
-  if(!m_tow_deployed)
-    return(d_nav);
+  // defaults
+  d_tow   = 1e9;
+  d_cable = 1e9;
 
+  bool tow_ok = (m_use_tow && m_tow_deployed);
+
+  // If tow-only and tow not deployed/valid: don't gate alerts on NAV
+  if(m_tow_only && !tow_ok)
+    return(1e9);
+
+  // If tow not enabled in general, fall back to NAV (legacy)
+  if(!m_use_tow || !tow_ok) {
+    d_tow   = d_nav;
+    d_cable = d_nav;
+    return(d_nav);
+  }
+
+  // Tow distance
   d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
 
+  // Cable optional (you said "not now", so usually off)
   if(m_use_tow_cable) {
-    // Use NAV as cable start (conservative). If you later publish hook/anchor, use that instead.
-    double x1 = m_nav_x;
-    double y1 = m_nav_y;
-    double x2 = m_towed_x;
-    double y2 = m_towed_y;
+    double x1 = m_nav_x,   y1 = m_nav_y;
+    double x2 = m_towed_x, y2 = m_towed_y;
 
     double seg_len = hypot(x2 - x1, y2 - y1);
     unsigned int samples = 1;
@@ -1373,18 +1404,29 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
 
     d_cable = 1e9;
     for(unsigned int i=0; i<=samples; i++) {
-      double t = (double)i / (double)samples;
+      double t  = (double)i / (double)samples;
       double xs = x1 + t*(x2-x1);
       double ys = y1 + t*(y2-y1);
       double di = poly.dist_to_poly(xs, ys);
       if(di < d_cable)
         d_cable = di;
     }
+  } else {
+    d_cable = d_tow;
   }
 
-  double d_sys = d_nav;
-  if(d_tow < d_sys)   d_sys = d_tow;
-  if(d_cable < d_sys) d_sys = d_cable;
+  // Tow-only return value
+  if(m_tow_only) {
+    double d_sys = d_tow;
+    if(m_use_tow_cable && (d_cable < d_sys))
+      d_sys = d_cable;
+    return(d_sys);
+  }
 
+  // legacy
+  double d_sys = d_nav;
+  if(d_tow < d_sys) d_sys = d_tow;
+  if(m_use_tow_cable && (d_cable < d_sys)) d_sys = d_cable;
   return(d_sys);
 }
+

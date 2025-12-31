@@ -68,6 +68,17 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_towed_y      = 0;
   m_use_tow_cable = false;
   m_cable_sample_step = 1.0;
+  m_tow_only = true;
+
+  m_use_tow_lead = true;
+  m_tow_lead_sec = 10.0;
+
+  m_last_tow_x = 0;
+  m_last_tow_y = 0;
+  m_last_tow_time = -1;
+
+  m_tow_x_eval = 0;
+  m_tow_y_eval = 0;
 
   // Cached ranges
   m_rng_sys = -1;
@@ -198,6 +209,9 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
     m_cable_sample_step = dval;
     return(true);
   }
+
+  else if(param == "tow_only")
+    return(setBooleanOnString(m_tow_only, val));
 
   else
     return(false);
@@ -339,27 +353,68 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
 
   // If tow enabled, read tow state and compute system range = min(nav,tow)
   if(m_use_tow) {
-    bool okx=true, oky=true, okd=true;
+    bool okx=true, oky=true;
     m_towed_x = getBufferDoubleVal("TOWED_X", okx);
     m_towed_y = getBufferDoubleVal("TOWED_Y", oky);
-    string dep = tolower(getBufferStringVal("TOW_DEPLOYED", okd));
-    m_tow_deployed = (dep == "true") || (dep == "yes") || (dep == "1");
 
-    if(okx && oky && okd && m_tow_deployed) {
+    // Robust TOW_DEPLOYED handling (string OR numeric)
+    bool okd_str=false;
+    string dep = tolower(getBufferStringVal("TOW_DEPLOYED", okd_str));
+    if(okd_str)
+      m_tow_deployed = (dep=="true" || dep=="yes" || dep=="1");
+    else {
+      bool okd_dbl=false;
+      double dep_d = getBufferDoubleVal("TOW_DEPLOYED", okd_dbl);
+      m_tow_deployed = (okd_dbl && (dep_d > 0.5));
+    }
+
+    if(okx && oky && m_tow_deployed) {
+
+      m_tow_x_eval = m_towed_x;
+      m_tow_y_eval = m_towed_y;
+
+      double now = 0;
+      if(m_info_buffer)
+        now = m_info_buffer->getCurrTime();
+
+
+      if(m_use_tow_lead && (m_tow_lead_sec > 0) && (m_last_tow_time > 0)) {
+        double dt = now - m_last_tow_time;
+
+        // sanity: avoid crazy dt on first iteration / pauses
+        if((dt > 0.05) && (dt < 5.0)) {
+          double vx = (m_towed_x - m_last_tow_x) / dt;
+          double vy = (m_towed_y - m_last_tow_y) / dt;
+
+          m_tow_x_eval = m_towed_x + vx * m_tow_lead_sec;
+          m_tow_y_eval = m_towed_y + vy * m_tow_lead_sec;
+        }
+      }
+
+      // update history
+      m_last_tow_x = m_towed_x;
+      m_last_tow_y = m_towed_y;
+      m_last_tow_time = now;
+
       XYPolygon gut_poly = m_obship_model.getGutPoly();
 
-      // Tow range to obstacle
-      m_rng_tow = gut_poly.dist_to_poly(m_towed_x, m_towed_y);
+      m_rng_tow = gut_poly.dist_to_poly(m_tow_x_eval, m_tow_y_eval);
 
-      // System range
-      m_rng_sys = std::min(m_rng_nav, m_rng_tow);
-      m_rng_sys = std::max(0.0, m_rng_sys - m_tow_pad);
+      if(m_rng_tow < 0) m_rng_tow = 0;          // if dist_to_poly can go negative inside
+      m_rng_tow = std::max(0.0, m_rng_tow - m_tow_pad);
 
-      // Identify which one is limiting
-      m_rng_src = (m_rng_tow <= m_rng_nav) ? "tow" : "nav";
-
-      // Use system range from here on
-      os_range_to_poly = m_rng_sys;
+      if(m_tow_only) {
+        // Tow-only: ignore nav range completely
+        m_rng_sys = m_rng_tow;
+        m_rng_src = "tow";
+        os_range_to_poly = m_rng_sys;
+      } else {
+        // Old behavior: min(nav,tow)
+        m_rng_sys = std::min(m_rng_nav, m_rng_tow);
+        m_rng_sys = std::max(0.0, m_rng_sys - m_tow_pad);
+        m_rng_src = (m_rng_tow <= m_rng_nav) ? "tow" : "nav";
+        os_range_to_poly = m_rng_sys;
+      }
     }
   }
   // =================================================================
@@ -431,6 +486,20 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     if(m_plat_model.getModelType() == "holo")
       postWMessage("holo plat_model not best. Set holonomic_ok=true to silence");
   }
+
+  XYPoint tow_act(m_towed_x, m_towed_y);
+  tow_act.set_label("tow_act");
+  tow_act.set_color("vertex", "yellow");
+  tow_act.set_vertex_size(3);
+  postMessage("VIEW_POINT", tow_act.get_spec());
+
+  XYPoint tow_eval(m_tow_x_eval, m_tow_y_eval);
+  tow_eval.set_label("tow_eval");
+  tow_eval.set_color("vertex", "orange");
+  tow_eval.set_vertex_size(3);
+  postMessage("VIEW_POINT", tow_eval.get_spec());
+
+
 }
 
 //---------------------------------------------------------------
@@ -527,13 +596,11 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
   // ---------------------------------------------------------
   if(m_use_tow && m_tow_deployed) {
     aof_avoid.setTowEval(true);
-
-    // If you later want to use measured tow heading, read TOWED_HEADING
-    // and pass it here. For the "shifted obstacle" method, hdg is not required.
-    aof_avoid.setTowPose(m_towed_x, m_towed_y, 0.0);
-  }
-  else {
+    aof_avoid.setTowPose(m_tow_x_eval, m_tow_y_eval, 0.0);
+    aof_avoid.setTowOnly(m_tow_only);
+  } else {
     aof_avoid.setTowEval(false);
+    aof_avoid.setTowOnly(false);
   }
   // ---------------------------------------------------------
 
@@ -594,6 +661,13 @@ double BHV_TowObstacleAvoid::getRelevance()
 
   // =================================================================
   // Tow Specific
+
+  // Tow-only mode: if tow isn't deployed/valid, this behavior should be irrelevant.
+  if(m_tow_only) {
+    if(!(m_use_tow && m_tow_deployed && (m_rng_sys >= 0)))
+      return(0);
+  }
+
   double range_relevance = m_obship_model.getRangeRelevance();
 
   // If tow is deployed, base relevance on the tow-aware system range
