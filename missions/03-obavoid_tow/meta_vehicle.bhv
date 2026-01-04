@@ -53,12 +53,12 @@ Behavior = BHV_Waypoint
     capture_line = true
   capture_radius = 5
      slip_radius = 15
-         polygon = oval: x=5.7,y=-47.1, rad=15, len=160, ang=64
+         polygon = oval: x=5.7,y=-47.1, rad=15, len=230, ang=64
            order = reverse
           repeat = 10000
 
 //       cycleflag = AAA_FOOBAR=true
-       cycleflag = UFOS_RESET=true
+//       cycleflag = UFOS_RESET=true
        cycleflag = WPT_CYCLES=$[CTR]
        cycleflag = WPT_HASH=$[HASH]
 	
@@ -126,9 +126,9 @@ Behavior=BHV_TowObstacleAvoid
       allowable_ttc = 30
 	min_util_cpa_dist = 2.5
 	max_util_cpa_dist = 5
-     pwt_outer_dist = 30
+     pwt_outer_dist = 45
      pwt_inner_dist = 5
-     completed_dist = 30
+     completed_dist = 45
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
@@ -140,6 +140,6 @@ Behavior=BHV_TowObstacleAvoid
   use_tow = true
   use_tow_cable = false  // if you want cable sampling
   cable_sample_step = 1.0
-  tow_pad = 0
+  tow_pad = 1.0
   tow_only = true
 }

@@ -106,7 +106,7 @@ ProcessConfig = uFldObstacleSim
   AppTick       = 1
   CommsTick     = 1
 
-  obstacle_file = obstacles.txt
+  obstacle_file = obstacles_fixed.txt
 
 	draw_region = true
 	region_edge_color = gray50
@@ -118,9 +118,9 @@ ProcessConfig = uFldObstacleSim
 	poly_edge_size  = 1        // default is 1
 	
 
-	min_duration = 400
-  max_duration = 500
-	refresh_interval = 200
+	//min_duration = 400
+  //max_duration = 500
+	//refresh_interval = 200
 
 	post_points = $(POINTS)
 	point_size  = 4
@@ -128,8 +128,8 @@ ProcessConfig = uFldObstacleSim
 	reuse_ids = true
 	
 #ifdef DRESET true
-	reset_interval = 250
-	reset_range    = 10
+	//reset_interval = 250
+	reset_range    = -1
 #endif
 	
 }

@@ -162,7 +162,7 @@ ProcessConfig = pTowObstacleMgr
 
 	post_view_polys = false
 	
-	given_max_duration = 1000
+	given_max_duration = off
 
 	general_alert = update_var=GEN_ALERT, alert_range=40000
 
@@ -226,8 +226,8 @@ ProcessConfig = pLogger
 
 ProcessConfig = pTowing
 {
-  AppTick	  = 20
-  CommsTick	= 20
+  AppTick	  = 4
+  CommsTick	= 4
 
   cable_length = 30
   attach_offset = 2
