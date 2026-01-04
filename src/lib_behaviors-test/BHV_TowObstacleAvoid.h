@@ -114,6 +114,8 @@ protected: // State variables
   double      m_rng_tow;
   std::string m_rng_src;
   double m_rng_cable;
+  double m_clear_dwell;
+  double m_clear_start;
 
   
 protected:

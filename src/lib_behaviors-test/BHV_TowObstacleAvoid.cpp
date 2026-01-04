@@ -30,7 +30,7 @@ using namespace std;
 BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   IvPBehavior(gdomain)
 {
-   this->setParam("descriptor", "towobsavoid");
+  this->setParam("descriptor", "towobsavoid");
   m_domain = subDomain(m_domain, "course,speed");
 
   // Initialize config vars
@@ -71,7 +71,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_tow_only = true;
 
   m_use_tow_lead = true;
-  m_tow_lead_sec = 10.0;
+  m_tow_lead_sec = 6.0;
 
   m_last_tow_x = 0;
   m_last_tow_y = 0;
@@ -86,10 +86,12 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_rng_tow = -1;
   m_rng_src = "nav";
   m_rng_cable = -1;
-  
+  m_clear_dwell = 2.0;   // seconds
+  m_clear_start = -1;
+
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
-  addInfoVars("TOWED_X, TOWED_Y, TOW_DEPLOYED"); //added
+  addInfoVars("TOW_DEPLOYED, TOWED_X, TOWED_Y", "no_warning"); //added no_warning because of issues with behavior RW's for TOWED_X, etc.
   addInfoVars(m_resolved_obstacle_var);
 }
 
@@ -478,9 +480,16 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   // =================================================================
   // Part 5: Check for completion based on range
   // =================================================================
-  if(os_range_to_poly > m_obship_model.getCompletedDist()) {
-    m_resolved_pending = true;
+  double cd = m_obship_model.getCompletedDist();
+  if(os_range_to_poly > cd) {
+    if(m_clear_start < 0)
+      m_clear_start = m_curr_time;
+    if((m_curr_time - m_clear_start) >= m_clear_dwell)
+      m_resolved_pending = true;
+  } else {
+    m_clear_start = -1;
   }
+
 
   if(!m_holonomic_ok) {
     if(m_plat_model.getModelType() == "holo")
@@ -529,8 +538,9 @@ void BHV_TowObstacleAvoid::onIdleToRunState()
 
 IvPFunction* BHV_TowObstacleAvoid::onRunState()
 {
- // Part 1: Handle if obstacle has been resolved
+  // If obstacle has been resolved -> erase visuals then complete
   if(m_resolved_pending) {
+    postErasablePolygons();   // <-- ADD THIS
     setComplete();
     return(0);
   }
@@ -539,43 +549,38 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
 
   m_obship_model.setCachedVals();
 
-  /*// Part 2: No IvP function if obstacle is aft
+  // If obstacle aft and tow isn't limiting -> erase visuals and return
   if(m_obship_model.isObstacleAft(20)) {
-    return(0);
-  }*/
-
-  // =================================================================
-  //Tow Specific: Keep running if obstacle aft
-  if(m_obship_model.isObstacleAft(20)) {
-    // If tow is what is close (not nav), we may still need to act
-    if(!(m_use_tow && m_tow_deployed && (m_rng_src == "tow")))
+    if(!(m_use_tow && m_tow_deployed && (m_rng_src == "tow"))) {
+      postErasablePolygons(); // <-- ADD THIS
       return(0);
+    }
   }
-  // =================================================================
-  
-  // Part 3: Determine the relevance
+
+  // Determine relevance
   m_obstacle_relevance = getRelevance();
-  if(m_obstacle_relevance <= 0)
+  if(m_obstacle_relevance <= 0) {
+    postErasablePolygons();   // <-- ADD THIS
     return(0);
+  }
 
   IvPFunction *ipf = buildOF();
 
-  // Special case 1: No IPF built, due to ownship being within
-  // the obstacle polygon. Likely want to invoke Allstop unless
-  // allstop_on_breach has been explicitly set to false.
   if(!ipf) {
+  // In tow-only missions, don’t spam helm with "Allstop" messages. Fix so it posts message for tow only later
+  if(!m_tow_only) {
     if(m_allstop_on_breach)
       postEMessage("Allstop: Obstacle Breached");
     else
       postWMessage("Obstacle Breached");
+    }
     return(0);
   }
-  
-  // If IvP function has no decisions with positive utility then
-  // this means a collision with an obstacle is unavoidable.
-  // Possible when using plat model with non-zero turn radius.
+
   if(ipf->getValMaxUtil() == 0) {
-    postEMessage("Allstop: obstacle unavoidable");
+    if(!m_tow_only)
+      postEMessage("Allstop: obstacle unavoidable");
+    // else: suppress completely
     delete(ipf);
     return(0);
   }
@@ -773,10 +778,10 @@ void BHV_TowObstacleAvoid::postErasablePolygons()
   // =================================================
   // Tow Specific: Erase tow point
   
-  // Erase tow point
+  /*// Erase tow point
   XYPoint towpt(0,0);
   towpt.set_label("tow_" + m_descriptor);
-  postMessage("VIEW_POINT", towpt.get_spec_inactive(), "tow");
+  postMessage("VIEW_POINT", towpt.get_spec_inactive(), "tow");*/
   
   // =================================================
   
