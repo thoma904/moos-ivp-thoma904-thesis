@@ -144,6 +144,10 @@ private: // State variables
   double m_towed_y;
   bool   m_tow_only;
 
+  bool m_tow_pose_valid;
+  bool m_towed_x_rcvd;
+  bool m_towed_y_rcvd;
+
   // Cable distance approximation
   bool   m_use_tow_cable;
   double m_cable_sample_step;     // meters (e.g., 0.5 or 1.0)

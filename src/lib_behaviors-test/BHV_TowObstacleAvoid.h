@@ -117,6 +117,16 @@ protected: // State variables
   double m_clear_dwell;
   double m_clear_start;
 
+  //Attempt to fix pred jumping
+  double m_tow_vx_filt;
+  double m_tow_vy_filt;
+  bool   m_tow_vel_valid;
+
+  double m_tow_pose_stale;
+  double m_tow_lead_alpha;
+  double m_tow_lead_max_speed;
+  double m_tow_xy_sync_eps;
+
   
 protected:
   HintHolder m_hints;

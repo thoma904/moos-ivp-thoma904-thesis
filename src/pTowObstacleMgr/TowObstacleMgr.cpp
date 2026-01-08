@@ -87,6 +87,10 @@ TowObstacleMgr::TowObstacleMgr()
 
   m_repost_interval = 1.0; // 1 Hz keepalive (tune as needed)
   m_tow_only = true;
+
+  m_tow_pose_valid = false;
+  m_towed_x_rcvd   = false;
+  m_towed_y_rcvd   = false;
 }
 
 //---------------------------------------------------------
@@ -126,14 +130,28 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
     }
 
     //Tow Specific Additions
-    else if(key == "TOWED_X") {
+    /*else if(key == "TOWED_X") {
       m_towed_x = dval;
       handled = true;
     }
     else if(key == "TOWED_Y") {
       m_towed_y = dval;
       handled = true;
+    }*/
+
+    else if(key == "TOWED_X") {
+      m_towed_x = dval;
+      m_towed_x_rcvd = true;
+      m_tow_pose_valid = (m_towed_x_rcvd && m_towed_y_rcvd);
+      handled = true;
     }
+    else if(key == "TOWED_Y") {
+      m_towed_y = dval;
+      m_towed_y_rcvd = true;
+      m_tow_pose_valid = (m_towed_x_rcvd && m_towed_y_rcvd);
+      handled = true;
+    }
+
     else if(key == "TOW_DEPLOYED") {
       if(msg.IsDouble()) {
         m_tow_deployed = (dval > 0.5);
@@ -192,10 +210,10 @@ bool TowObstacleMgr::Iterate()
   updatePolyRanges();
   postConvexHullUpdates();
 
-  Notify("TOWMGR_TOW_DEPLOYED", m_tow_deployed ? "true" : "false");
+  //Notify("TOWMGR_TOW_DEPLOYED", m_tow_deployed ? "true" : "false");
   Notify("TOWMGR_TOW_ONLY",     m_tow_only ? "true" : "false");
 
-  if(m_use_tow && m_tow_deployed) {
+  if(m_use_tow && m_tow_pose_valid) {
     XYPoint towpt(m_towed_x, m_towed_y);
     towpt.set_label("towmgr_tow");
     towpt.set_color("vertex", "yellow");
@@ -608,7 +626,20 @@ bool TowObstacleMgr::handleMailNewPoint(string value)
   if(m_ignore_range > 0) {
     double ptx = newpt.get_vx();
     double pty = newpt.get_vy();
-    double range = hypot(m_nav_x - ptx, m_nav_y - pty);
+    //double range = hypot(m_nav_x - ptx, m_nav_y - pty);
+
+    double ox = m_nav_x;
+    double oy = m_nav_y;
+
+    // Tow-only: ignore range relative to tow if we have tow pose
+    if(m_use_tow && m_tow_pose_valid) {
+      ox = m_towed_x;
+      oy = m_towed_y;
+    }
+
+    double range = hypot(ox - ptx, oy - pty);
+
+
     if(range > m_ignore_range) {
       m_points_ignored++;
       return(true);
@@ -1071,7 +1102,7 @@ void TowObstacleMgr::manageMemory()
     {
       // Tow/system-aware hold: keep stale point-obstacles around long
       // enough for the tow to catch up.
-      if(m_use_tow && m_tow_deployed && !p->second.isGiven()) {
+      //if(m_use_tow && m_tow_deployed && !p->second.isGiven()) {
 
         XYPolygon poly = p->second.getPoly();
         if(poly.is_convex() && (poly.size() >= 3)) {
@@ -1079,14 +1110,16 @@ void TowObstacleMgr::manageMemory()
           double d_sys = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
           d_sys = std::max(0.0, d_sys - m_tow_pad);
 
-          double tow_len = hypot(m_nav_x - m_towed_x, m_nav_y - m_towed_y);
+          /*double tow_len = hypot(m_nav_x - m_towed_x, m_nav_y - m_towed_y);
 
           // Hold obstacles within this expanded "system concern" range
-          double hold_range = std::max(m_alert_range, tow_len + m_alert_range);
+          double hold_range = std::max(m_alert_range, tow_len + m_alert_range);*/
+
+          double hold_range = m_alert_range;
 
           if(d_sys <= hold_range)
             remove = false;
-        }
+        //}
       }
     }
 
@@ -1369,29 +1402,28 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
                                              double& d_tow,
                                              double& d_cable) const
 {
-  d_nav   = poly.dist_to_poly(m_nav_x, m_nav_y);
+  // Optional debug only
+  d_nav = poly.dist_to_poly(m_nav_x, m_nav_y);
 
-  // defaults
   d_tow   = 1e9;
   d_cable = 1e9;
 
-  bool tow_ok = (m_use_tow && m_tow_deployed);
+  // Tow is "ok" if enabled AND we have received tow pose at least once.
+  bool tow_ok = (m_use_tow && m_tow_pose_valid);
 
-  // If tow-only and tow not deployed/valid: don't gate alerts on NAV
+  // Tow-only mode: if tow pose not valid yet, treat as "unknown / far"
+  // (This is NOT a deploy gate; it's a data validity guard.)
   if(m_tow_only && !tow_ok)
     return(1e9);
 
-  // If tow not enabled in general, fall back to NAV (legacy)
-  if(!m_use_tow || !tow_ok) {
-    d_tow   = d_nav;
-    d_cable = d_nav;
-    return(d_nav);
-  }
+  // Tow-only: if tow is not ok, don't fall back to NAV.
+  if(!tow_ok)
+    return(1e9);
 
   // Tow distance
   d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
 
-  // Cable optional (you said "not now", so usually off)
+  // Cable optional (still NAV->TOW for now; later you may swap to anchor->tow)
   if(m_use_tow_cable) {
     double x1 = m_nav_x,   y1 = m_nav_y;
     double x2 = m_towed_x, y2 = m_towed_y;
@@ -1415,18 +1447,11 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
     d_cable = d_tow;
   }
 
-  // Tow-only return value
-  if(m_tow_only) {
-    double d_sys = d_tow;
-    if(m_use_tow_cable && (d_cable < d_sys))
-      d_sys = d_cable;
-    return(d_sys);
-  }
+  // Tow-only return: use tow (or cable if enabled)
+  double d_sys = d_tow;
+  if(m_use_tow_cable && (d_cable < d_sys))
+    d_sys = d_cable;
 
-  // legacy
-  double d_sys = d_nav;
-  if(d_tow < d_sys) d_sys = d_tow;
-  if(m_use_tow_cable && (d_cable < d_sys)) d_sys = d_cable;
   return(d_sys);
 }
 

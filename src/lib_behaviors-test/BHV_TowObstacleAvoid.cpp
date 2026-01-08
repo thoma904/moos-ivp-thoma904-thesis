@@ -89,6 +89,17 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_clear_dwell = 2.0;   // seconds
   m_clear_start = -1;
 
+  //attempt to fix pred jumping
+  m_tow_vx_filt = 0;
+  m_tow_vy_filt = 0;
+  m_tow_vel_valid = false;
+
+  m_tow_pose_stale = 1.0;    // seconds: consider tow stale if older than this
+  m_tow_lead_alpha = 0.3;    // 0..1 low-pass filter aggressiveness
+  m_tow_lead_max_speed = 3.0; // m/s cap
+  m_tow_xy_sync_eps  = 0.10;
+
+
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
   addInfoVars("TOW_DEPLOYED, TOWED_X, TOWED_Y", "no_warning"); //added no_warning because of issues with behavior RW's for TOWED_X, etc.
@@ -354,10 +365,13 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   m_tow_deployed = false;
 
   // If tow enabled, read tow state and compute system range = min(nav,tow)
-  if(m_use_tow) {
+  if(m_use_tow) 
+  {
     bool okx=true, oky=true;
-    m_towed_x = getBufferDoubleVal("TOWED_X", okx);
-    m_towed_y = getBufferDoubleVal("TOWED_Y", oky);
+    double tx = getBufferDoubleVal("TOWED_X", okx);
+    double ty = getBufferDoubleVal("TOWED_Y", oky);
+    if(okx) m_towed_x = tx;
+    if(oky) m_towed_y = ty;
 
     // Robust TOW_DEPLOYED handling (string OR numeric)
     bool okd_str=false;
@@ -372,7 +386,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
 
     if(okx && oky && m_tow_deployed) {
 
-      m_tow_x_eval = m_towed_x;
+      /*m_tow_x_eval = m_towed_x;
       m_tow_y_eval = m_towed_y;
 
       double now = 0;
@@ -396,7 +410,146 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       // update history
       m_last_tow_x = m_towed_x;
       m_last_tow_y = m_towed_y;
-      m_last_tow_time = now;
+      m_last_tow_time = now;*/
+
+      // ---------------------------------------------------------
+      // ROBUST TOW LEAD UPDATE (drop-in)
+      // ---------------------------------------------------------
+
+      // Always start with "no-lead" eval at the actual tow pose
+      m_tow_x_eval = m_towed_x;
+      m_tow_y_eval = m_towed_y;
+
+      double now = m_curr_time;
+      if(m_info_buffer)
+        now = m_info_buffer->getCurrTime();
+
+      // Try to get message timestamps for X/Y so we only compute velocity on fresh samples.
+      // NOTE: If your InfoBuffer doesn't have tQuery(), comment out this block and
+      // leave pose_time = now.
+      bool   ok_tx_t = false, ok_ty_t = false;
+      double tx_t = 0, ty_t = 0;
+      double pose_time = now;
+      double newest_t  = now;
+
+      if(m_info_buffer) {
+        // Many MOOS-IvP builds support this:
+        tx_t = m_info_buffer->tQuery("TOWED_X", ok_tx_t);
+        ty_t = m_info_buffer->tQuery("TOWED_Y", ok_ty_t);
+
+        if(ok_tx_t && ok_ty_t) {
+          newest_t  = std::max(tx_t, ty_t);
+          pose_time = newest_t;  // treat pose time as the newer of (x,y)
+        }
+        else if(ok_tx_t) {
+          newest_t = pose_time = tx_t;
+        }
+        else if(ok_ty_t) {
+          newest_t = pose_time = ty_t;
+        }
+      }
+
+      // If the tow pose hasn't updated recently, disable velocity projection
+      bool pose_stale = ((now - newest_t) > m_tow_pose_stale);
+      if(pose_stale) {
+        m_tow_vel_valid = false;
+      }
+      else if(m_use_tow_lead && (m_tow_lead_sec > 0)) {
+
+        // If we have both timestamps, require them to be "paired" (avoid mixing new X with old Y)
+        bool pose_synced = true;
+        if(ok_tx_t && ok_ty_t) {
+          pose_synced = (fabs(tx_t - ty_t) <= m_tow_xy_sync_eps);
+        }
+
+        // Determine whether this is a *new* pose sample
+        bool new_sample = false;
+        if(m_last_tow_time < 0) {
+          new_sample = true;
+        }
+        else if(ok_tx_t && ok_ty_t) {
+          // Only treat as new when BOTH components are newer than last accepted pose
+          new_sample = pose_synced &&
+                      (tx_t > (m_last_tow_time + 1e-6)) &&
+                      (ty_t > (m_last_tow_time + 1e-6));
+        }
+        else {
+          // If no timestamps available, fall back to time-based updates (less ideal)
+          new_sample = (pose_time > (m_last_tow_time + 0.05));
+        }
+
+        if(new_sample && (m_last_tow_time > 0)) {
+          double dt = pose_time - m_last_tow_time;
+
+          // Guard dt
+          if((dt > 0.05) && (dt < 2.0)) {
+
+            double dx = (m_towed_x - m_last_tow_x);
+            double dy = (m_towed_y - m_last_tow_y);
+
+            double inst_vx  = dx / dt;
+            double inst_vy  = dy / dt;
+            double inst_spd = hypot(inst_vx, inst_vy);
+
+            // Reject teleport spikes: don't update velocity on implausible speed
+            if(inst_spd <= m_tow_lead_max_speed) {
+
+              // Low-pass filter velocity (reduces jitter)
+              if(!m_tow_vel_valid) {
+                m_tow_vx_filt   = inst_vx;
+                m_tow_vy_filt   = inst_vy;
+                m_tow_vel_valid = true;
+              }
+              else {
+                m_tow_vx_filt = m_tow_lead_alpha * inst_vx +
+                                (1.0 - m_tow_lead_alpha) * m_tow_vx_filt;
+                m_tow_vy_filt = m_tow_lead_alpha * inst_vy +
+                                (1.0 - m_tow_lead_alpha) * m_tow_vy_filt;
+              }
+
+              // Cap filtered speed too
+              double filt_spd = hypot(m_tow_vx_filt, m_tow_vy_filt);
+              if(filt_spd > m_tow_lead_max_speed) {
+                double s = m_tow_lead_max_speed / filt_spd;
+                m_tow_vx_filt *= s;
+                m_tow_vy_filt *= s;
+              }
+
+              // Accept this sample as the new history anchor (ONLY when it passed checks)
+              m_last_tow_x    = m_towed_x;
+              m_last_tow_y    = m_towed_y;
+              m_last_tow_time = pose_time;
+            }
+            else {
+              // Bad sample -> drop velocity, but DO NOT move the history anchor.
+              // This makes you recover immediately when good data returns.
+              m_tow_vel_valid = false;
+            }
+          }
+          else {
+            // dt not usable -> drop velocity
+            m_tow_vel_valid = false;
+          }
+        }
+        else if(new_sample && (m_last_tow_time < 0)) {
+          // First-ever accepted anchor
+          m_last_tow_x    = m_towed_x;
+          m_last_tow_y    = m_towed_y;
+          m_last_tow_time = pose_time;
+          m_tow_vel_valid = false;  // need at least two samples to compute velocity
+        }
+
+        // Finally: compute eval point using filtered velocity if valid
+        if(m_tow_vel_valid) {
+          m_tow_x_eval = m_towed_x + m_tow_vx_filt * m_tow_lead_sec;
+          m_tow_y_eval = m_towed_y + m_tow_vy_filt * m_tow_lead_sec;
+        }
+      }
+
+      // ---------------------------------------------------------
+      // END ROBUST TOW LEAD UPDATE
+      // ---------------------------------------------------------
+
 
       XYPolygon gut_poly = m_obship_model.getGutPoly();
 
@@ -413,7 +566,8 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       } else {
         // Old behavior: min(nav,tow)
         m_rng_sys = std::min(m_rng_nav, m_rng_tow);
-        m_rng_sys = std::max(0.0, m_rng_sys - m_tow_pad);
+        //m_rng_sys = std::max(0.0, m_rng_sys - m_tow_pad);
+        m_rng_sys = std::max(0.0, m_rng_sys); // pad already applied to tow above
         m_rng_src = (m_rng_tow <= m_rng_nav) ? "tow" : "nav";
         os_range_to_poly = m_rng_sys;
       }
