@@ -634,7 +634,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   // =================================================================
   // Part 5: Check for completion based on range
   // =================================================================
-  double cd = m_obship_model.getCompletedDist();
+  /*double cd = m_obship_model.getCompletedDist();
   if(os_range_to_poly > cd) {
     if(m_clear_start < 0)
       m_clear_start = m_curr_time;
@@ -642,7 +642,15 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       m_resolved_pending = true;
   } else {
     m_clear_start = -1;
+  }*/
+
+  // =================================================================
+  // Part 5: Check for completion based on range (match original V24)
+  // =================================================================
+  if(os_range_to_poly > m_obship_model.getCompletedDist()) {
+    m_resolved_pending = true;
   }
+
 
 
   if(!m_holonomic_ok) {
@@ -693,7 +701,7 @@ void BHV_TowObstacleAvoid::onIdleToRunState()
 IvPFunction* BHV_TowObstacleAvoid::onRunState()
 {
   // If obstacle has been resolved -> erase visuals then complete
-  if(m_resolved_pending) {
+  /*if(m_resolved_pending) {
     postErasablePolygons();   // <-- ADD THIS
     setComplete();
     return(0);
@@ -718,7 +726,23 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
     return(0);
   }
 
-  IvPFunction *ipf = buildOF();
+  IvPFunction *ipf = buildOF();*/
+
+  if(m_resolved_pending) { setComplete(); return 0; }
+  if(!m_valid_cn_obs_info) return 0;
+
+  m_obship_model.setCachedVals();
+
+  if(m_obship_model.isObstacleAft(20)) {
+    if(!(m_use_tow && m_tow_deployed && (m_rng_src=="tow")))
+      return 0;
+  }
+
+  m_obstacle_relevance = getRelevance();
+  if(m_obstacle_relevance <= 0)
+    return 0;
+
+  IvPFunction* ipf = buildOF();
 
   if(!ipf) {
   // In tow-only missions, don’t spam helm with "Allstop" messages. Fix so it posts message for tow only later

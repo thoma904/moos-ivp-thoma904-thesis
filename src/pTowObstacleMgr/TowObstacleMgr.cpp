@@ -628,7 +628,7 @@ bool TowObstacleMgr::handleMailNewPoint(string value)
     double pty = newpt.get_vy();
     //double range = hypot(m_nav_x - ptx, m_nav_y - pty);
 
-    double ox = m_nav_x;
+    /*double ox = m_nav_x;
     double oy = m_nav_y;
 
     // Tow-only: ignore range relative to tow if we have tow pose
@@ -641,6 +641,23 @@ bool TowObstacleMgr::handleMailNewPoint(string value)
 
 
     if(range > m_ignore_range) {
+      m_points_ignored++;
+      return(true);
+    }*/
+
+    double range_nav = hypot(m_nav_x - ptx, m_nav_y - pty);
+    double range_use = range_nav;
+
+    if(m_use_tow && m_tow_pose_valid) {
+      double range_tow = hypot(m_towed_x - ptx, m_towed_y - pty);
+
+      if(m_tow_only)
+        range_use = range_tow;
+      else
+        range_use = std::min(range_nav, range_tow);
+    }
+
+    if(range_use > m_ignore_range) {
       m_points_ignored++;
       return(true);
     }
@@ -1090,63 +1107,35 @@ void TowObstacleMgr::manageMemory()
 {
   set<string> keys_to_forget;
 
-  // Part 1: Identify all obstacles to be pruned by age
+  // Identify obstacles to forget
   map<string, Obstacle>::iterator p;
   for(p=m_map_obstacles.begin(); p!=m_map_obstacles.end(); p++) {
     string key  = p->first;
+
     bool remove = p->second.pruneByAge(m_max_age_per_point, m_curr_time);
+
+    // Keep original behavior: inactive poly means remove no matter what
     if(p->second.getPoly().active() == false)
       remove = true;
-
-    if(remove) 
-    {
-      // Tow/system-aware hold: keep stale point-obstacles around long
-      // enough for the tow to catch up.
-      //if(m_use_tow && m_tow_deployed && !p->second.isGiven()) {
-
-        XYPolygon poly = p->second.getPoly();
-        if(poly.is_convex() && (poly.size() >= 3)) {
-          double d_nav, d_tow, d_cable;
-          double d_sys = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
-          d_sys = std::max(0.0, d_sys - m_tow_pad);
-
-          /*double tow_len = hypot(m_nav_x - m_towed_x, m_nav_y - m_towed_y);
-
-          // Hold obstacles within this expanded "system concern" range
-          double hold_range = std::max(m_alert_range, tow_len + m_alert_range);*/
-
-          double hold_range = m_alert_range;
-
-          if(d_sys <= hold_range)
-            remove = false;
-        //}
-      }
-    }
-
 
     if(remove)
       keys_to_forget.insert(key);
   }
-    
-  // Part 2: Free memory for obstacles flagged above
+
+  // Free memory for obstacles flagged above
   set<string>::iterator q;
   for(q=keys_to_forget.begin(); q!=keys_to_forget.end(); q++) {
     string key = *q;
 
-    // Post inactive view poly to erase this poly
     if(m_post_view_polys) {
       XYPolygon poly = m_map_obstacles[key].getPoly();
-      string spec = poly.get_spec_inactive();
-      Notify("VIEW_POLYGON", spec);
+      Notify("VIEW_POLYGON", poly.get_spec_inactive());
     }
 
-    // Post to alert variabe that this obstacle is resolved
     Notify("OBM_RESOLVED", key);
     m_alerts_resolved++;
     reportEvent("OBM_RESOLVED=" + key);
 
-    
-    // Update key obstacle manager state
     m_map_obstacles.erase(key);
     m_obstacles_released++;
   }
@@ -1413,12 +1402,22 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
 
   // Tow-only mode: if tow pose not valid yet, treat as "unknown / far"
   // (This is NOT a deploy gate; it's a data validity guard.)
-  if(m_tow_only && !tow_ok)
+  /*if(m_tow_only && !tow_ok)
     return(1e9);
 
   // Tow-only: if tow is not ok, don't fall back to NAV.
   if(!tow_ok)
-    return(1e9);
+    return(1e9);*/
+
+
+  if(!tow_ok) {
+  d_tow   = 1e9;
+  d_cable = 1e9;
+  return(m_tow_only ? 1e9 : d_nav);
+  }
+
+
+
 
   // Tow distance
   d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
@@ -1451,6 +1450,9 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
   double d_sys = d_tow;
   if(m_use_tow_cable && (d_cable < d_sys))
     d_sys = d_cable;
+
+  if(!m_tow_only && (d_nav < d_sys))
+    d_sys = d_nav;
 
   return(d_sys);
 }
