@@ -88,7 +88,7 @@ Behavior = BHV_Waypoint
   wpt_dist_to_prev = DIST_TO_PREV
 
 	perpetual = true
-      speed = 0.5 //updated
+      speed = 1.2
      radius = 5.0
   nm_radius = 15.0
       point = 0,0
