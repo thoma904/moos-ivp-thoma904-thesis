@@ -70,6 +70,39 @@ public:
  private: // State variables
   int    m_crs_ix;  // Index of "course" variable in IvPDomain
   int    m_spd_ix;  // Index of "speed"  variable in IvPDomain
+
+
+//Updating with ptowing dynamics
+
+ public:
+  void setTowState(double x, double y, double vx, double vy);
+  void setTowDynParams(double cable_len, double attach_offset,
+                       double k_spring, double cd, double c_tan);
+  void setSimParams(double dt, double horizon, double turn_rate_max_deg = 0.0);
+
+private:
+  void propagateTowOneStep(double ax, double ay, double dt,
+                           double &tx, double &ty,
+                           double &tvx, double &tvy) const;
+
+ private:
+  // Tow state (at eval start)
+  double m_tow_vx = 0;
+  double m_tow_vy = 0;
+
+  // Tow dynamics params (match pTowing)
+  bool   m_dyn_params_set = false;
+  double m_cable_length   = 30;
+  double m_attach_offset  = 0;
+  double m_k_spring       = 5;
+  double m_cd             = 0.7;
+  double m_c_tan          = 2.0;
+
+  // Simulation params
+  double m_sim_dt         = 0.2;   // pick something reasonable
+  double m_sim_horizon    = -1;    // if <0 use allowable_ttc
+  double m_turn_rate_max  = 0.0;   // 0 => instantaneous heading
+
 };
 
 #endif

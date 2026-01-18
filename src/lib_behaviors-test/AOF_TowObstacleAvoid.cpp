@@ -9,7 +9,9 @@
 
 #include <cmath>
 #include <string>
+#include <algorithm>
 #include "AOF_TowObstacleAvoid.h"
+#include "AngleUtils.h"
 
 using namespace std;
 
@@ -88,10 +90,10 @@ bool AOF_TowObstacleAvoid::initialize()
 
   // Standard: fail if ownship starts inside gut
   // If we're NOT tow-only, keep the original behavior: ownship cannot be in gut.
-  if(!(m_tow_eval && m_tow_only)) {
+  /*if(!(m_tow_eval && m_tow_only)) {
     if(m_obship_model.ownshipInGutPoly())
       return(postMsgAOF("m_obstacle contains osx,osy"));
-  }
+  }*/
   // If tow-only: ownship may be in the gut poly, that's OK.
 
 
@@ -99,8 +101,9 @@ bool AOF_TowObstacleAvoid::initialize()
   m_tow_model_ready = false;
   m_tow_breached    = false;
 
-  if(m_tow_eval) {
-    if(!m_tow_pose_set)
+  if(m_tow_eval) 
+  {
+    /*if(!m_tow_pose_set)
       return(postMsgAOF("tow_eval enabled but tow pose not set"));
 
     // Build a tow-aware model that uses the SAME turn model and ownship pose,
@@ -128,7 +131,12 @@ bool AOF_TowObstacleAvoid::initialize()
     // We do NOT fail init; we just force min-utility in eval.
     m_tow_breached = m_obship_model_tow.ownshipInGutPoly();
 
-    m_tow_model_ready = true;
+    m_tow_model_ready = true;*/
+    
+    if(!m_tow_pose_set)
+      return(postMsgAOF("tow_eval enabled but tow pose not set"));
+    if(!m_dyn_params_set)
+      return(postMsgAOF("tow_eval enabled but dyn params not set"));
   }
 
   return(true);
@@ -141,37 +149,238 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
 {
   double eval_crs = 0;
   double eval_spd = 0;
-
   m_domain.getVal(m_crs_ix, b->pt(m_crs_ix,0), eval_crs);
   m_domain.getVal(m_spd_ix, b->pt(m_spd_ix,0), eval_spd);
 
-  // If tow is enabled and we're tow-only, don't even evaluate nav.
-  if(m_tow_eval && m_tow_only) {
+  // Tow-only behavior: if tow state/params not ready, don't distort
+  if(!m_tow_eval || !m_tow_only)
+    return(getKnownMax()); // or assert; but you said tow-only
 
-    // Tow model not ready -> neutral (or min). I'd recommend neutral==knownMax
-    // so the behavior doesn't distort decisions when tow isn't actually active.
-    if(!m_tow_pose_set || !m_tow_model_ready)
-      return(getKnownMax());
+  if(!m_tow_pose_set || !m_dyn_params_set)
+    return(getKnownMax());
 
-    // If tow is already in gut, you can decide policy:
-    // - strict: return min (all decisions bad)
-    // - recover: still evaluate u_tow and let it try to improve (often still flat)
-    if(m_tow_breached)
-      return(getKnownMin());
+  // Simulation horizon
+  double T = (m_sim_horizon > 0) ? m_sim_horizon : m_obship_model.getAllowableTTC();
+  double dt = m_sim_dt;
+  int steps = (dt > 1e-6) ? (int)ceil(T / dt) : 0;
+  if(steps <= 0)
+    return(getKnownMax());
 
-    double u_tow = m_obship_model_tow.evalHdgSpd(eval_crs, eval_spd);
-    return(u_tow);
-  }
+  // Initial vessel pose (used only to drive anchor motion)
+  double osx = m_obship_model.getOSX();
+  double osy = m_obship_model.getOSY();
+  double osh = m_obship_model.getOSH(); // deg (MOOS)
 
-  // Otherwise (not tow-only): original behavior
-  double u_nav = m_obship_model.evalHdgSpd(eval_crs, eval_spd);
+  // Initial tow state
+  double tx = m_tow_x;
+  double ty = m_tow_y;
+  double tvx = m_tow_vx;
+  double tvy = m_tow_vy;
 
-  if(!m_tow_eval || !m_tow_pose_set || !m_tow_model_ready)
-    return(u_nav);
+  // Obstacle polygon (gut)
+  XYPolygon gut = m_obship_model.getGutPoly();
 
-  if(m_tow_breached)
+  // Track minimum distance over horizon (CPA-style)
+  double min_dist = 1e9;
+
+  // Optional: if already inside, immediate min
+  double d0 = gut.dist_to_poly(tx, ty);
+  if(d0 < 0) d0 = 0;
+  min_dist = std::min(min_dist, d0);
+  if(min_dist <= 0)
     return(getKnownMin());
 
-  double u_tow = m_obship_model_tow.evalHdgSpd(eval_crs, eval_spd);
-  return((u_tow < u_nav) ? u_tow : u_nav);
+  // Simulate forward
+  double vh = osh;          // vessel heading state for turn-rate-limited model
+  double vs = eval_spd;     // commanded speed (constant)
+
+  for(int k=0; k<steps; k++) {
+
+    // --- heading update (optional turn-rate limit) ---
+    if(m_turn_rate_max > 0) {
+      double diff = angleDiff(eval_crs, vh); // signed [-180,180]
+      double step_deg = m_turn_rate_max * dt;
+      if(fabs(diff) <= step_deg)
+        vh = eval_crs;
+      else
+        vh = angle360(vh + (diff > 0 ? step_deg : -step_deg));
+    } else {
+      vh = eval_crs;
+    }
+
+    // --- vessel position update (simple kinematics) ---
+    double hdg_rad = (90.0 - vh) * M_PI / 180.0;
+    osx += vs * cos(hdg_rad) * dt;
+    osy += vs * sin(hdg_rad) * dt;
+
+    // --- anchor point from attach offset ---
+    double ax = osx - m_attach_offset * cos(hdg_rad);
+    double ay = osy - m_attach_offset * sin(hdg_rad);
+
+    // --- tow dynamics: replicate pTowing step exactly ---
+    propagateTowOneStep(ax, ay, dt, tx, ty, tvx, tvy);
+
+    // --- measure distance to obstacle ---
+    double d = gut.dist_to_poly(tx, ty);
+    if(d < 0) d = 0;
+    min_dist = std::min(min_dist, d);
+
+    if(min_dist <= 0)
+      break;
+  }
+
+  // Map min_dist -> utility using min/max util CPA distances
+  double minu = m_obship_model.getMinUtilCPA();
+  double maxu = m_obship_model.getMaxUtilCPA();
+
+  if(min_dist <= minu)
+    return(getKnownMin());
+  if(min_dist >= maxu)
+    return(getKnownMax());
+
+  double pct = (min_dist - minu) / (maxu - minu);
+  return(getKnownMin() + pct * (getKnownMax() - getKnownMin()));
+}
+
+void AOF_TowObstacleAvoid::setTowState(double x,double y,double vx,double vy)
+{
+  m_tow_x = x;
+  m_tow_y = y;
+  m_tow_vx = vx;
+  m_tow_vy = vy;
+  m_tow_pose_set = true;
+}
+
+void AOF_TowObstacleAvoid::setTowDynParams(double L, double attach,
+                                          double k, double cd, double c_tan)
+{
+  m_cable_length  = L;
+  m_attach_offset = attach;
+  m_k_spring      = k;
+  m_cd            = cd;
+  m_c_tan         = c_tan;
+  m_dyn_params_set = true;
+}
+
+void AOF_TowObstacleAvoid::setSimParams(double dt, double horizon, double turn_rate_max_deg)
+{
+  if(dt > 1e-4) m_sim_dt = dt;
+  m_sim_horizon = horizon;
+  m_turn_rate_max = turn_rate_max_deg;
+}
+
+#include <cmath>
+#include <algorithm>  // std::max
+
+void AOF_TowObstacleAvoid::propagateTowOneStep(double ax, double ay, double dt,
+                                               double &tx, double &ty,
+                                               double &tvx, double &tvy) const
+{
+  // ---- Robustness ----
+  if(!(dt > 0))
+    return;
+  dt = std::max(dt, 1e-3);
+
+  // If cable length is nonsensical, just integrate ballistic + drag.
+  // (Better than NaNs / divide-by-zero)
+  if(!(m_cable_length > 0)) {
+    // optional drag even in this fallback:
+    double spd = std::hypot(tvx, tvy);
+    if((spd > 1e-6) && (m_cd > 0)) {
+      tvx += -m_cd * tvx * spd * dt;
+      tvy += -m_cd * tvy * spd * dt;
+    }
+    tx += tvx * dt;
+    ty += tvy * dt;
+    return;
+  }
+
+  // -----------------------
+  // Copy of pTowing deployed dynamics
+  // -----------------------
+
+  // vector from tow to anchor
+  double dx = ax - tx;
+  double dy = ay - ty;
+  double distance = std::hypot(dx, dy);   // pre-clamp distance
+
+  // In your app you gate on distance > 0.01.
+  // Here we keep the same spirit, but still allow ballistic integrate if tiny.
+  if(distance <= 0.01) {
+    // apply quadratic drag (optional; pTowing would skip everything here)
+    double spd = std::hypot(tvx, tvy);
+    if((spd > 1e-6) && (m_cd > 0)) {
+      tvx += -m_cd * tvx * spd * dt;
+      tvy += -m_cd * tvy * spd * dt;
+    }
+
+    tx += tvx * dt;
+    ty += tvy * dt;
+    return;
+  }
+
+  // unit vector along cable (tow -> anchor)
+  double d_dir = std::hypot(dx, dy);
+  if(d_dir < 1e-6)
+    d_dir = 1.0;
+
+  double ux = dx / d_dir;
+  double uy = dy / d_dir;
+
+  // tangential unit vector
+  double nx = -uy;
+  double ny =  ux;
+
+  // ---- Soft tension term (spring) when overstretched ----
+  if((distance > m_cable_length) && (m_k_spring > 0)) {
+    double overshoot = distance - m_cable_length;
+    tvx += m_k_spring * overshoot * ux * dt;
+    tvy += m_k_spring * overshoot * uy * dt;
+  }
+
+  // ---- Quadratic drag on tow speed ----
+  double speed = std::hypot(tvx, tvy);
+  if((speed > 1e-6) && (m_cd > 0)) {
+    tvx += -m_cd * tvx * speed * dt;
+    tvy += -m_cd * tvy * speed * dt;
+  }
+
+  // ---- Tangential damping (penalize sideways motion) ----
+  if(m_c_tan > 0) {
+    double vt = tvx*nx + tvy*ny;   // sideways component
+    tvx += (-m_c_tan * vt) * nx * dt;
+    tvy += (-m_c_tan * vt) * ny * dt;
+  }
+
+  // ---- Integrate position (Euler) ----
+  tx += tvx * dt;
+  ty += tvy * dt;
+
+  // ---- Rigid cable clamp (project onto circle if beyond length) ----
+  double sx = ax - tx;
+  double sy = ay - ty;
+  double dist_a = std::hypot(sx, sy);
+
+  if((dist_a > m_cable_length) && (dist_a > 1e-9)) {
+
+    double sc = m_cable_length / dist_a;
+
+    // Move tow back onto the cable length
+    tx = ax - sx * sc;
+    ty = ay - sy * sc;
+
+    // Unit vector from tow -> anchor (same direction as sx,sy)
+    double urx = sx / dist_a;
+    double ury = sy / dist_a;
+
+    // NOTE: matches your pTowing implementation:
+    // uses tow velocity in world frame, not (v_towed - v_anchor)
+    double vrad = tvx * urx + tvy * ury;
+
+    // If moving outward (away from anchor), remove that component
+    if(vrad < 0) {
+      tvx -= vrad * urx;
+      tvy -= vrad * ury;
+    }
+  }
 }
