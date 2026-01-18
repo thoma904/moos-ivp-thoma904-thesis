@@ -123,9 +123,6 @@ bool Towing::Iterate()
   m_nav_vx = m_nav_speed * cos(hdg_rad);
   m_nav_vy = m_nav_speed * sin(hdg_rad);
 
-  Notify("TOWED_VX", m_towed_vx);
-  Notify("TOWED_VY", m_towed_vy);
-
   // Compute the position of the tow hook
   m_anchor_x = m_nav_x - m_attach_offset * cos(hdg_rad);
   m_anchor_y = m_nav_y - m_attach_offset * sin(hdg_rad);
@@ -290,6 +287,9 @@ bool Towing::Iterate()
   string tb_hdg_str = "heading=" + doubleToStringX(tow_heading,1);
   Notify("TOWING_HEADING", tb_hdg_str);
   Notify("TOWED_HEADING", tow_heading);
+
+  Notify("TOWED_VX", m_towed_vx);
+  Notify("TOWED_VY", m_towed_vy);
 
   /* This was replaced by NODE_REPORT_LOCAL, can be re-enabled if desired for troubleshooting.
   // VIEW_POINT for MarineViewer
