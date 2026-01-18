@@ -113,6 +113,9 @@ protected: // State variables
   double      m_rng_nav;
   double      m_rng_tow;
   std::string m_rng_src;
+
+  double m_rng_tow_actual;
+
   double m_rng_cable;
   double m_clear_dwell;
   double m_clear_start;
@@ -127,7 +130,17 @@ protected: // State variables
   double m_tow_lead_max_speed;
   double m_tow_xy_sync_eps;
 
-  
+  //tow dynamics
+  double m_cable_length   = 30;
+  double m_attach_offset  = 0;
+  double m_k_spring       = 5;
+  double m_cd             = 0.7;
+  double m_c_tan          = 2.0;
+
+  double m_sim_dt = 0.1;
+  double m_sim_horizon = -1;        // use allowable_ttc if <0
+  double m_turn_rate_max = 15.0;    // deg/sec (tune)
+
 protected:
   HintHolder m_hints;
   
