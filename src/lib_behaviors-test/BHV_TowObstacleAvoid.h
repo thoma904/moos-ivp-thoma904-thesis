@@ -48,7 +48,11 @@ protected: // Local Utility functions
 
   //Tow Specific Utilities
   double computeRangeRelevanceFromRange(double range) const;
-
+  std::string getPassingSideTowAware(bool tow_pose_valid,
+                                                    double tow_x, double tow_y,
+                                                    bool tow_vel_valid,
+                                                    double tow_vx, double tow_vy,
+                                                    double fallback_hdg) const;
 
 protected:
   ObShipModelV24 m_obship_model;
@@ -106,6 +110,12 @@ protected: // State variables
 
   double m_tow_x_eval;
   double m_tow_y_eval;
+
+  double m_towed_vx;
+  double m_towed_vy;
+  bool   m_towed_vel_valid;
+  bool   m_tow_pose_valid;
+
   double m_curr_time;
 
   // Cached ranges (nav vs tow vs system=min)

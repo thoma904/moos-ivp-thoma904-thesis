@@ -71,7 +71,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_tow_only = true;
 
   m_use_tow_lead = true;
-  m_tow_lead_sec = 3.0;
+  m_tow_lead_sec = 6.0;
 
   m_last_tow_x = 0;
   m_last_tow_y = 0;
@@ -79,6 +79,11 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_tow_x_eval = 0;
   m_tow_y_eval = 0;
+
+  m_towed_vx = 0;
+  m_towed_vy = 0;
+  m_towed_vel_valid = false;
+  m_tow_pose_valid = false;
 
   // Cached ranges
   m_rng_sys = -1;
@@ -366,6 +371,11 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   m_rng_src = "nav";
   m_tow_deployed = false;
 
+  m_tow_pose_valid   = false;
+  m_towed_vel_valid  = false;
+  m_towed_vx         = 0;
+  m_towed_vy         = 0;
+
   bool tow_pose_valid = false; // added
 
   // If tow enabled, read tow state and compute system range = min(nav,tow)
@@ -378,6 +388,12 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     if(oky) m_towed_y = ty;
 
     tow_pose_valid = (okx && oky);
+    m_tow_pose_valid = tow_pose_valid;
+
+    bool okvx=true, okvy=true;
+    m_towed_vx = getBufferDoubleVal("TOWED_VX", okvx);
+    m_towed_vy = getBufferDoubleVal("TOWED_VY", okvy);
+    m_towed_vel_valid = (okvx && okvy);
 
     // Robust TOW_DEPLOYED handling (string OR numeric)
     bool okd_str=false;
@@ -391,32 +407,6 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     }
 
     if(okx && oky && m_tow_deployed) {
-
-      /*m_tow_x_eval = m_towed_x;
-      m_tow_y_eval = m_towed_y;
-
-      double now = 0;
-      if(m_info_buffer)
-        now = m_info_buffer->getCurrTime();
-
-
-      if(m_use_tow_lead && (m_tow_lead_sec > 0) && (m_last_tow_time > 0)) {
-        double dt = now - m_last_tow_time;
-
-        // sanity: avoid crazy dt on first iteration / pauses
-        if((dt > 0.05) && (dt < 5.0)) {
-          double vx = (m_towed_x - m_last_tow_x) / dt;
-          double vy = (m_towed_y - m_last_tow_y) / dt;
-
-          m_tow_x_eval = m_towed_x + vx * m_tow_lead_sec;
-          m_tow_y_eval = m_towed_y + vy * m_tow_lead_sec;
-        }
-      }
-
-      // update history
-      m_last_tow_x = m_towed_x;
-      m_last_tow_y = m_towed_y;
-      m_last_tow_time = now;*/
 
       // ---------------------------------------------------------
       // ROBUST TOW LEAD UPDATE (drop-in)
@@ -556,9 +546,6 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       // END ROBUST TOW LEAD UPDATE
       // ---------------------------------------------------------
 
-
-      //XYPolygon gut_poly = m_obship_model.getGutPoly();
-
       XYPolygon gut_poly = m_obship_model.getGutPoly();
 
       //----------------------------------------------------
@@ -578,12 +565,6 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       if(m_rng_tow < 0) m_rng_tow = 0;
       m_rng_tow = std::max(0.0, m_rng_tow - m_tow_pad);
 
-
-      /*m_rng_tow = gut_poly.dist_to_poly(m_tow_x_eval, m_tow_y_eval);
-
-      if(m_rng_tow < 0) m_rng_tow = 0;          // if dist_to_poly can go negative inside
-      m_rng_tow = std::max(0.0, m_rng_tow - m_tow_pad);*/
-
       if(m_tow_only) {
         // Tow-only: ignore nav range completely
         m_rng_sys = m_rng_tow;
@@ -599,7 +580,6 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       }
     }
   }
-  // =================================================================
 
   if((m_cpa_rng_ever < 0) || (os_range_to_poly < m_cpa_rng_ever))
     m_cpa_rng_ever = os_range_to_poly;
@@ -656,66 +636,6 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     postFlags(m_cpa_flags);
     m_cpa_reported = m_cpa_rng_ever;
   }
-  
-  // =================================================================
-  // Part 5: Check for completion based on range
-  // =================================================================
-  /*double cd = m_obship_model.getCompletedDist();
-  if(os_range_to_poly > cd) {
-    if(m_clear_start < 0)
-      m_clear_start = m_curr_time;
-    if((m_curr_time - m_clear_start) >= m_clear_dwell)
-      m_resolved_pending = true;
-  } else {
-    m_clear_start = -1;
-  }*/
-
-  // =================================================================
-  // Part 5: Check for completion based on range (match original V24)
-  // =================================================================
-  /*if(os_range_to_poly > m_obship_model.getCompletedDist()) {
-    m_resolved_pending = true;
-  }*/
-
-  // =================================================================
-  // Part 5: Completion based on ACTUAL tow position (not eval point)
-  // =================================================================
-  /*double cd = m_obship_model.getCompletedDist();
-
-  // default: fall back to whatever the behavior has been using
-  double rng_complete = os_range_to_poly;
-
-  // If tow is deployed and we have a valid tow pose, compute completion
-  // range from the ACTUAL tow position.
-  if(m_use_tow && m_tow_deployed && tow_pose_valid) {
-    XYPolygon gut_poly = m_obship_model.getGutPoly();
-
-    double rng_tow_actual = gut_poly.dist_to_poly(m_towed_x, m_towed_y);
-
-    // dist_to_poly may return negative if "inside" depending on impl
-    if(rng_tow_actual < 0)
-      rng_tow_actual = 0;
-
-    // apply the same pad convention you use elsewhere
-    rng_tow_actual = std::max(0.0, rng_tow_actual - m_tow_pad);
-
-    if(m_tow_only) {
-      // Tow-only mission: completion means the ACTUAL tow is clear
-      rng_complete = rng_tow_actual;
-    } else {
-      // If you're still running combined mode, use nav range + ACTUAL tow range
-      // (nav is already "actual nav", tow here is "actual tow", not eval)
-      rng_complete = std::min(m_rng_nav, rng_tow_actual);
-    }
-  }
-  else if(m_tow_only) {
-    // In tow-only mode, if tow isn't deployed/valid, we should NOT complete early.
-    rng_complete = -1;
-  }
-
-  if((rng_complete >= 0) && (rng_complete > cd)) {
-    m_resolved_pending = true;
-  }*/
 
   // =================================================================
   // Part 5: Completion based on ACTUAL tow (truth), not eval point
@@ -783,34 +703,6 @@ void BHV_TowObstacleAvoid::onIdleToRunState()
 
 IvPFunction* BHV_TowObstacleAvoid::onRunState()
 {
-  // If obstacle has been resolved -> erase visuals then complete
-  /*if(m_resolved_pending) {
-    postErasablePolygons();   // <-- ADD THIS
-    setComplete();
-    return(0);
-  }
-  if(!m_valid_cn_obs_info)
-    return(0);
-
-  m_obship_model.setCachedVals();
-
-  // If obstacle aft and tow isn't limiting -> erase visuals and return
-  if(m_obship_model.isObstacleAft(20)) {
-    if(!(m_use_tow && m_tow_deployed && (m_rng_src == "tow"))) {
-      postErasablePolygons(); // <-- ADD THIS
-      return(0);
-    }
-  }
-
-  // Determine relevance
-  m_obstacle_relevance = getRelevance();
-  if(m_obstacle_relevance <= 0) {
-    postErasablePolygons();   // <-- ADD THIS
-    return(0);
-  }
-
-  IvPFunction *ipf = buildOF();*/
-
   if(m_resolved_pending) { setComplete(); return 0; }
   if(!m_valid_cn_obs_info) return 0;
 
@@ -886,7 +778,14 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     // Optional: match simulation dt to pTowing AppTick (e.g., 0.1 for 10 Hz)
     aof_avoid.setSimParams(0.1, -1 /*use allowable_ttc*/);
 
-  } else {
+    aof_avoid.setTowSpeedPenalty(true);
+    aof_avoid.setTowSpeedMin(0.5);        // start penalizing below 0.5 m/s tow speed
+    aof_avoid.setTowSpeedHardMin(0.1);    // optional: forbid <0.1 m/s tow speed
+    aof_avoid.setTowSpeedPenaltyPower(2); // quadratic
+    aof_avoid.setTowSpeedPenaltyFloor(0); // can set e.g. 0.05 to avoid "all flats" if needed
+  } 
+  
+  else {
     aof_avoid.setTowEval(false);
     aof_avoid.setTowOnly(false);
   }
@@ -926,6 +825,9 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
 
       // Override what ObShipModel considers "ownship"
       refine_model.setPose(m_towed_x, m_towed_y, tow_hdg);
+      //double osh = m_obship_model.getOSH();   // vessel heading
+      //refine_model.setPose(m_towed_x, m_towed_y, osh);
+      //refine_model.setCachedVals(true);
 
       // If you use cached vals in the model, refresh them (supported in your codebase)
       refine_model.setCachedVals(true);
@@ -996,12 +898,25 @@ double BHV_TowObstacleAvoid::getRelevance()
 
   if(range_relevance > 0.6) {
     if(m_side_lock == "") {
-      if(m_obship_model.getPassingSide() == "star")
+      /*if(m_obship_model.getPassingSide() == "star")
 	m_side_lock = "port";
       else if(m_obship_model.getPassingSide() == "port")
 	m_side_lock = "star";
       else 
-	m_side_lock = "";
+	m_side_lock = "";*/
+  string pass_side = getPassingSideTowAware(m_tow_pose_valid,     // you already compute this in onEveryState()
+                                         m_towed_x, m_towed_y,
+                                         m_towed_vel_valid,
+                                         m_towed_vx, m_towed_vy,
+                                         m_obship_model.getOSH()); // fallback heading
+
+  if(pass_side == "star")
+    m_side_lock = "port";
+  else if(pass_side == "port")
+    m_side_lock = "star";
+  else
+    m_side_lock = "";
+
     }
   }
   else
@@ -1210,7 +1125,7 @@ string BHV_TowObstacleAvoid::expandMacros(string sdata)
     sdata = macroExpand(sdata, "BNG", m_obship_model.getObcentBng());
 
   if(strContains(sdata, "$[RBNG]"))
-    sdata = macroExpand(sdata, "BNG", m_obship_model.getObcentRelBng());
+    sdata = macroExpand(sdata, "RBNG", m_obship_model.getObcentRelBng());
 
   if(strContains(sdata, "$[SIDE]"))
     sdata = macroExpand(sdata, "SIDE", m_obship_model.getPassingSide());
@@ -1343,4 +1258,40 @@ double BHV_TowObstacleAvoid::computeRangeRelevanceFromRange(double range) const
     return(1);
 
   return((outer - range) / (outer - inner));  // linear ramp
+}
+
+string BHV_TowObstacleAvoid::getPassingSideTowAware(bool tow_pose_valid,
+                                                    double tow_x, double tow_y,
+                                                    bool tow_vel_valid,
+                                                    double tow_vx, double tow_vy,
+                                                    double fallback_hdg) const
+{
+  // Always have a nav fallback
+  string nav_side = m_obship_model.getPassingSide();
+
+  // Only override if tow is actually usable
+  if(!(m_use_tow && m_tow_deployed && tow_pose_valid))
+    return(nav_side);
+
+  // Choose heading for the tow-posed model:
+  // - If tow velocity is valid, use it (matches your refinery approach)
+  // - Otherwise fall back to vessel/nav heading (passed in)
+  double hdg = fallback_hdg;
+  if(tow_vel_valid) {
+    double spd = hypot(tow_vx, tow_vy);
+    if(spd > 1e-6)
+      hdg = relAng(0, 0, tow_vx, tow_vy);
+  }
+
+  ObShipModelV24 tmp = m_obship_model;
+  tmp.setPose(tow_x, tow_y, hdg);
+  tmp.setCachedVals(true);
+
+  string tow_side = tmp.getPassingSide();
+
+  // If ambiguous, fall back
+  if(tow_side == "")
+    return(nav_side);
+
+  return(tow_side);
 }
