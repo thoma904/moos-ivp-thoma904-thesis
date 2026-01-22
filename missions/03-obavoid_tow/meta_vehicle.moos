@@ -24,7 +24,7 @@ Processconfig = ANTLER
   Run = pHostInfo      @ NewConsole = false
   Run = uFldNodeBroker @ NewConsole = false
   Run = uLoadWatch     @ NewConsole = false
-  //Run = pObstacleMgr   @ NewConsole = false
+  Run = pObstacleMgr   @ NewConsole = false
   Run = pTowObstacleMgr @ NewConsole = false
   Run = pTowing        @ NewConsole = false
   //Run = pTowing_Circle @ NewConsole = false
@@ -145,6 +145,25 @@ ProcessConfig = pMarinePID
   SPEED_FACTOR = 20
 }
 
+ProcessConfig = pObstacleMgr
+{
+  AppTick   = 4 
+  CommsTick = 4 
+
+  point_var = TRACKED_FEATURE 
+
+	app_logging = true
+	
+	//obstacles_color = $(VCOLOR)
+	obstacles_color = green
+
+	post_view_polys = false
+	
+	given_max_duration = off
+
+	general_alert = update_var=GEN_ALERT, alert_range=40000	
+} 
+
 //-------------------------------------------------------
 // pTowObstacleMgr Config Block 
 
@@ -164,7 +183,7 @@ ProcessConfig = pTowObstacleMgr
 	
 	given_max_duration = off
 
-	general_alert = update_var=GEN_ALERT, alert_range=40000
+	general_alert = update_var=GEN_ALERT_T, alert_range=40000
 
   max_age_per_point = 120
 
