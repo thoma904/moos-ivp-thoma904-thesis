@@ -34,6 +34,13 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
   m_tow_model_ready = false;
   m_tow_breached    = false;
   m_tow_only       = false;
+
+  // Tow speed penalty defaults (OFF by default)
+  m_penalize_low_tow_spd = false;
+  m_tow_spd_min          = 0.0;   // if <=0, soft penalty disabled
+  m_tow_spd_hard_min     = 0.0;   // if >0, hard clamp enabled
+  m_tow_spd_power        = 2.0;   // quadratic shaping
+  m_tow_spd_floor        = 0.0;   // allow factor to go to 0 (can set >0 to avoid flattening)
 }
 
 //----------------------------------------------------------------
@@ -88,51 +95,12 @@ bool AOF_TowObstacleAvoid::initialize()
   if(!m_obship_model.getGutPoly().is_convex())
     return(postMsgAOF("m_obstacle is not convex"));
 
-  // Standard: fail if ownship starts inside gut
-  // If we're NOT tow-only, keep the original behavior: ownship cannot be in gut.
-  /*if(!(m_tow_eval && m_tow_only)) {
-    if(m_obship_model.ownshipInGutPoly())
-      return(postMsgAOF("m_obstacle contains osx,osy"));
-  }*/
-  // If tow-only: ownship may be in the gut poly, that's OK.
-
-
   // --- Tow model build ---
   m_tow_model_ready = false;
   m_tow_breached    = false;
 
   if(m_tow_eval) 
-  {
-    /*if(!m_tow_pose_set)
-      return(postMsgAOF("tow_eval enabled but tow pose not set"));
-
-    // Build a tow-aware model that uses the SAME turn model and ownship pose,
-    // but shifts the obstacle so evaluating ownship CPA == tow CPA.
-    // If tow is at (osx+dx, osy+dy), shift obstacle by (-dx,-dy).
-    double osx = m_obship_model.getOSX();
-    double osy = m_obship_model.getOSY();
-    double dx  = m_tow_x - osx;
-    double dy  = m_tow_y - osy;
-
-    XYPolygon shifted = m_obship_model.getGutPoly();
-    shifted.shift_horz(-dx);
-    shifted.shift_vert(-dy);
-
-    m_obship_model_tow = m_obship_model;
-
-    string msg = m_obship_model_tow.setGutPoly(shifted);
-    if(msg != "")
-      return(postMsgAOF("tow shifted gut poly failed: " + msg));
-
-    // Ensure the mid/rim polys + caches align with shifted gut poly
-    m_obship_model_tow.setCachedVals(true);
-
-    // If tow is inside gut, then ownship is inside shifted gut.
-    // We do NOT fail init; we just force min-utility in eval.
-    m_tow_breached = m_obship_model_tow.ownshipInGutPoly();
-
-    m_tow_model_ready = true;*/
-    
+  { 
     if(!m_tow_pose_set)
       return(postMsgAOF("tow_eval enabled but tow pose not set"));
     if(!m_dyn_params_set)
@@ -177,6 +145,11 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   double tvx = m_tow_vx;
   double tvy = m_tow_vy;
 
+  // Track a conservative tow-speed metric over the horizon.
+  // I recommend MIN predicted tow speed over the simulated steps.
+  double min_tow_spd = 1e9;
+
+
   // Obstacle polygon (gut)
   XYPolygon gut = m_obship_model.getGutPoly();
 
@@ -220,6 +193,11 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     // --- tow dynamics: replicate pTowing step exactly ---
     propagateTowOneStep(ax, ay, dt, tx, ty, tvx, tvy);
 
+    // --- track tow speed (predicted) ---
+    double tow_spd = hypot(tvx, tvy);
+    if(tow_spd < min_tow_spd)
+      min_tow_spd = tow_spd;
+
     // --- measure distance to obstacle ---
     double d = gut.dist_to_poly(tx, ty);
     if(d < 0) d = 0;
@@ -229,17 +207,26 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
       break;
   }
 
-  // Map min_dist -> utility using min/max util CPA distances
+    // Map min_dist -> utility using min/max util CPA distances
   double minu = m_obship_model.getMinUtilCPA();
   double maxu = m_obship_model.getMaxUtilCPA();
 
-  if(min_dist <= minu)
-    return(getKnownMin());
-  if(min_dist >= maxu)
-    return(getKnownMax());
+  double u_obs = getKnownMin();
 
-  double pct = (min_dist - minu) / (maxu - minu);
-  return(getKnownMin() + pct * (getKnownMax() - getKnownMin()));
+  if(min_dist <= minu)
+    u_obs = getKnownMin();
+  else if(min_dist >= maxu)
+    u_obs = getKnownMax();
+  else {
+    double pct = (min_dist - minu) / (maxu - minu);
+    u_obs = (getKnownMin() + pct * (getKnownMax() - getKnownMin()));
+  }
+
+  // Apply tow-speed penalty using the *predicted* tow speed metric
+  if(min_tow_spd > 1e8)  // no updates? (shouldn't happen if steps>0)
+    return u_obs;
+
+  return applyTowSpeedPenalty(u_obs, min_tow_spd);
 }
 
 void AOF_TowObstacleAvoid::setTowState(double x,double y,double vx,double vy)
@@ -383,4 +370,55 @@ void AOF_TowObstacleAvoid::propagateTowOneStep(double ax, double ay, double dt,
       tvy -= vrad * ury;
     }
   }
+}
+
+static double clamp01(double v)
+{
+  if(v < 0.0) return 0.0;
+  if(v > 1.0) return 1.0;
+  return v;
+}
+
+double AOF_TowObstacleAvoid::applyTowSpeedPenalty(double util, double tow_spd_metric) const
+{
+  if(!m_penalize_low_tow_spd)
+    return util;
+
+  const double umin = getKnownMin();
+  const double umax = getKnownMax();
+  const double urng = (umax - umin);
+  if(urng <= 1e-9)
+    return util;
+
+  // Optional hard floor: if predicted tow speed drops below this, make it worst
+  if((m_tow_spd_hard_min > 0.0) && (tow_spd_metric < m_tow_spd_hard_min))
+    return umin;
+
+  // Soft penalty disabled unless a meaningful threshold is set
+  if(!(m_tow_spd_min > 0.0))
+    return util;
+
+  // No penalty if above threshold
+  if(tow_spd_metric >= m_tow_spd_min)
+    return util;
+
+  // frac in [0..1]
+  double frac = (tow_spd_metric <= 0.0) ? 0.0 : (tow_spd_metric / m_tow_spd_min);
+  frac = clamp01(frac);
+
+  // shape (quadratic by default)
+  double shaped = frac;
+  if(m_tow_spd_power > 0.0)
+    shaped = pow(frac, m_tow_spd_power);
+
+  // factor in [floor..1]
+  double floor = clamp01(m_tow_spd_floor);
+  double factor = floor + (1.0 - floor) * shaped;
+
+  // Scale normalized utility (never increases utility)
+  double unorm = (util - umin) / urng;
+  unorm = clamp01(unorm);
+  unorm *= factor;
+
+  return (umin + unorm * urng);
 }

@@ -54,6 +54,13 @@ public:
   void   setTowEval(bool v) {m_tow_eval = v;}
   void setTowOnly(bool v) { m_tow_only = v; }
 
+  //Tow Speed Penalty
+  void setTowSpeedPenalty(bool v)        { m_penalize_low_tow_spd = v; }
+  void setTowSpeedMin(double v)          { m_tow_spd_min = v; }          // soft threshold
+  void setTowSpeedHardMin(double v)      { m_tow_spd_hard_min = v; }     // hard floor (optional)
+  void setTowSpeedPenaltyPower(double p) { m_tow_spd_power = p; }        // shaping (>=1)
+  void setTowSpeedPenaltyFloor(double f) { m_tow_spd_floor = f; }        // [0..1]
+
  private: // Config variables
   ObShipModelV24 m_obship_model;
 
@@ -74,7 +81,7 @@ public:
 
 //Updating with ptowing dynamics
 
- public:
+public:
   void setTowState(double x, double y, double vx, double vy);
   void setTowDynParams(double cable_len, double attach_offset,
                        double k_spring, double cd, double c_tan);
@@ -84,8 +91,9 @@ private:
   void propagateTowOneStep(double ax, double ay, double dt,
                            double &tx, double &ty,
                            double &tvx, double &tvy) const;
+  double applyTowSpeedPenalty(double util, double tow_spd_metric) const;
 
- private:
+private:
   // Tow state (at eval start)
   double m_tow_vx = 0;
   double m_tow_vy = 0;
@@ -102,6 +110,13 @@ private:
   double m_sim_dt         = 0.2;   // pick something reasonable
   double m_sim_horizon    = -1;    // if <0 use allowable_ttc
   double m_turn_rate_max  = 0.0;   // 0 => instantaneous heading
+
+  //Tow Speed Penalty Params
+  bool   m_penalize_low_tow_spd;
+  double m_tow_spd_min;
+  double m_tow_spd_hard_min;
+  double m_tow_spd_power;
+  double m_tow_spd_floor;
 
 };
 
