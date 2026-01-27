@@ -74,10 +74,7 @@ protected: // Configuration parameters
   bool m_holonomic_ok;
 
   //Tow Specific Additions
-  bool   m_use_tow;
   double m_tow_pad;
-  bool   m_use_tow_cable;
-  double m_cable_sample_step;
 
 protected: // State variables
   double  m_obstacle_relevance;
@@ -99,8 +96,6 @@ protected: // State variables
   // Tow state
   double m_towed_x;
   double m_towed_y;
-  bool   m_tow_deployed;
-  bool   m_tow_only;
   bool   m_use_tow_lead;
   double m_tow_lead_sec;
 
@@ -118,17 +113,14 @@ protected: // State variables
 
   double m_curr_time;
 
-  // Cached ranges (nav vs tow vs system=min)
+  // Cached ranges: NAV range and tow range are tracked separately.
+  // System range is the tow eval/lead range when tow pose is valid.
   double      m_rng_sys;
   double      m_rng_nav;
   double      m_rng_tow;
   std::string m_rng_src;
 
   double m_rng_tow_actual;
-
-  double m_rng_cable;
-  double m_clear_dwell;
-  double m_clear_start;
 
   //Attempt to fix pred jumping
   double m_tow_vx_filt;
