@@ -1357,5 +1357,3 @@ string BHV_TowObstacleAvoid::getPassingSideTowAware(bool tow_pose_valid, double 
 
   return(tow_side);
 }
-
-//if we want cable length to change dynamically, we can create an app that calulates it at a specific depth.
