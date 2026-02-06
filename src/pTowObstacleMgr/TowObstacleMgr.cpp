@@ -1457,3 +1457,4 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
   return(d_sys);
 }
 
+//potentially remove tow pose valid gates and tow deployed gate since behavior doesn't depend on them anymore
