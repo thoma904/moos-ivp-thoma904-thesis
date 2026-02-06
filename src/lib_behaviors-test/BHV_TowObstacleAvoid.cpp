@@ -109,10 +109,23 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_tow_lead_max_speed = 3.0; // m/s cap
   m_tow_xy_sync_eps  = 0.10;
 
+  // Tow dynamics defaults (overwritten each iteration by pTowing publications)
+  m_cable_length   = 30;
+  m_attach_offset  = 0;
+  m_k_spring       = 5;
+  m_cd             = 0.7;
+  m_c_tan          = 2.0;
+
+  m_sim_dt         = 0.1;
+  m_sim_horizon    = -1;
+  m_turn_rate_max  = 15.0;
+
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
-  addInfoVars("TOWED_X, TOWED_Y", "no_warning"); //added no_warning because of issues with behavior RW's for TOWED_X, etc.
-  addInfoVars("TOWED_VX, TOWED_VY", "no_warning"); //added no_warning because of issues with behavior RW's for TOWED_X, etc.
+  addInfoVars("TOWED_X, TOWED_Y", "no_warning");
+  addInfoVars("TOWED_VX, TOWED_VY", "no_warning");
+  addInfoVars("TOW_CABLE_LENGTH, TOW_ATTACH_OFFSET", "no_warning");
+  addInfoVars("TOW_SPRING_STIFFNESS, TOW_DRAG_COEFF, TOW_TAN_DAMPING", "no_warning");
   addInfoVars(m_resolved_obstacle_var);
 }
 
@@ -392,6 +405,27 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   m_towed_vx = getBufferDoubleVal("TOWED_VX", okvx);
   m_towed_vy = getBufferDoubleVal("TOWED_VY", okvy);
   m_towed_vel_valid = (okvx && okvy);
+
+  // Read tow dynamics parameters published by pTowing.
+  // These update the member variables used by the AOF; defaults are
+  // kept if pTowing has not yet published.
+  bool ok_tmp = false;
+  double tmp_val = 0;
+
+  tmp_val = getBufferDoubleVal("TOW_CABLE_LENGTH", ok_tmp);
+  if(ok_tmp) m_cable_length = tmp_val;
+
+  tmp_val = getBufferDoubleVal("TOW_ATTACH_OFFSET", ok_tmp);
+  if(ok_tmp) m_attach_offset = tmp_val;
+
+  tmp_val = getBufferDoubleVal("TOW_SPRING_STIFFNESS", ok_tmp);
+  if(ok_tmp) m_k_spring = tmp_val;
+
+  tmp_val = getBufferDoubleVal("TOW_DRAG_COEFF", ok_tmp);
+  if(ok_tmp) m_cd = tmp_val;
+
+  tmp_val = getBufferDoubleVal("TOW_TAN_DAMPING", ok_tmp);
+  if(ok_tmp) m_c_tan = tmp_val;
 
   // Tow velocity is optional.
   // If valid, it is used for (1) lead-point prediction and (2) tow-heading inference
@@ -1323,3 +1357,5 @@ string BHV_TowObstacleAvoid::getPassingSideTowAware(bool tow_pose_valid, double 
 
   return(tow_side);
 }
+
+//if we want cable length to change dynamically, we can create an app that calulates it at a specific depth.
