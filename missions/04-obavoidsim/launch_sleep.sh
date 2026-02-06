@@ -218,18 +218,35 @@ if [ "${XLAUNCHED}" != "yes" ]; then
     # trap "" SIGINT
     # echo; echo "$ME: Halting all apps"
     
+    POLL_COUNT=0
+    MAX_POLLS=120  # Timeout after ~120 polls (~10 min at warp=10)
     while true; do
-        uQueryDB targ_abe.moos --condition="FINISHED=true"
+        uQueryDB targ_abe.moos --condition="FINISHED=true" 2>/dev/null
         if [ "$?" = 0 ]; then 
-            echo -n "Mission finished, restarting..."
-            killall pAntler
+            echo -n "Mission finished. Shutting down..."
+            ktm
             sleep 2
             echo "Done."
-            # exec "$0" "$@"  # Restart the script
             exit 0
         fi
-        sleep 5
-        echo "continuing..."
+
+        POLL_COUNT=$((POLL_COUNT + 1))
+        if [ $POLL_COUNT -ge $MAX_POLLS ]; then
+            echo "Mission timed out after $MAX_POLLS polls. Forcing shutdown."
+            ktm
+            sleep 2
+            exit 1
+        fi
+
+        # Check if MOOSDB is still running; exit if it died
+        if ! pgrep -x MOOSDB > /dev/null 2>&1; then
+            echo "MOOSDB died unexpectedly. Aborting this run."
+            ktm
+            sleep 2
+            exit 1
+        fi
+
+        sleep 3
     done
 fi
 
