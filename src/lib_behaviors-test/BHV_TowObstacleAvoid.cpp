@@ -34,8 +34,9 @@ using namespace std;
 //---------------------------------------------------------------
 // Constructor()
 // Note: Most obstacle geometry/state lives in m_obship_model.
-//       Tow-related state is tracked in member variables and refreshed each iteration
-//       from the InfoBuffer (e.g., m_tow_pose_valid, m_rng_sys, m_rng_tow_actual).
+//       Tow-related state is tracked in member variables. Tow pose/velocity
+//       are refreshed from InfoBuffer (TOWED_X/Y, TOWED_VX/VY) each iteration,
+//       while m_rng_tow_actual is computed internally from the tow position.
 
 
 BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
@@ -351,25 +352,21 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   //   - m_tow_pose_valid: true when BOTH TOWED_X and TOWED_Y are available this iteration
   //   - m_rng_tow: range from tow eval/lead point to obstacle polygon (used for relevance/flags)
   //   - m_rng_tow_actual: range from actual tow pose to obstacle polygon (used for completion)
-  //   - m_rng_sys: the range used for relevance/flags; always set to m_rng_tow when tow pose is valid
+  //   - During tow dropout, no range flags/CPA are evaluated
   // =================================================================
   // Tow Specific: Compute range based on tow status
   
-  // Start with NAV range as a fallback/diagnostic.
-  // In tow-only operation, this is overwritten by tow-range when tow pose is valid.
+  // Initialize NAV range for diagnostics only; behavioral logic is gated on tow_sys_valid
   double os_range_to_poly = m_obship_model.getRange();
 
-  // Initialize cached ranges to NAV defaults.
-  // When tow pose is valid, m_rng_sys/m_rng_src are overwritten with tow-based values.
+  // Diagnostic only. When tow pose is valid, m_rng_sys/m_rng_src are overwritten with tow-based values.
   m_rng_nav = os_range_to_poly;
   m_rng_tow = os_range_to_poly;
   m_rng_sys = os_range_to_poly;
   m_rng_src = "nav";
   m_rng_tow_actual = -1;
 
-  // Reset per-iteration cached ranges to nav defaults.
-  // m_rng_tow_actual is reset to -1 so completion cannot use stale tow truth
-  // when tow pose is missing this iteration.
+  // m_rng_tow_actual is reset to -1 so completion cannot use stale tow truth when tow pose is missing this iteration.
 
   m_tow_pose_valid   = false;
   m_towed_vel_valid  = false;
@@ -570,61 +567,85 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     os_range_to_poly = m_rng_sys;
   }
 
-  if((m_cpa_rng_ever < 0) || (os_range_to_poly < m_cpa_rng_ever))
-    m_cpa_rng_ever = os_range_to_poly;
-  m_cpa_reported = m_cpa_rng_ever;
+  // Strict tow-only gate: only treat range as valid when it is tow-derived this iteration.
+  bool tow_sys_valid = (m_tow_pose_valid && (m_rng_src == "tow") && (m_rng_sys >= 0));
+
+  if(tow_sys_valid) 
+  {
+    if((m_cpa_rng_ever < 0) || (os_range_to_poly < m_cpa_rng_ever))
+      m_cpa_rng_ever = os_range_to_poly;
+    m_cpa_reported = m_cpa_rng_ever;
+  } 
+  else 
+  {
+    // Strict tow-only: prevent NAV fallback from polluting CPA memory/state.
+    // Also reset the CPA tracker so we don't trigger a false CPA event when tow returns.
+    m_cpa_rng_sofar = -1;
+    m_fpa_rng_sofar = -1;
+    m_closing       = false;
+
+    // Optional: make CPA unknown during dropout (useful for macros/diagnostics)
+    // m_cpa_reported  = -1;
+  }
+
 
   // =================================================================
   // Part 3: Handle Range Flags if any
   // =================================================================
-  if(m_rng_thresh.size() != m_rng_flags.size())
-    postWMessage("Range flag mismatch");
-  else {
+  if(m_rng_thresh.size() != m_rng_flags.size()) {
+  postWMessage("Range flag mismatch");
+  }
+  else if(tow_sys_valid) {
     vector<VarDataPair> rng_flags;
     for(unsigned int i=0; i<m_rng_thresh.size(); i++) {
       double thresh = m_rng_thresh[i];
       if((thresh <= 0) || (os_range_to_poly < thresh))
-	rng_flags.push_back(m_rng_flags[i]);
+        rng_flags.push_back(m_rng_flags[i]);
     }
     postFlags(rng_flags);
   }
+  // else: strict tow-only -> do not post range flags on NAV fallback
 
   // =================================================================
   // Part 4: Handle CPA Flags if any, if a CPA event is observed
   // =================================================================
   // Part 4A: Check for CPA Event
-  bool cpa_event = false;
-  if((m_cpa_rng_sofar < 0) || (m_fpa_rng_sofar < 0)) {
-    m_cpa_rng_sofar = os_range_to_poly;
-    m_fpa_rng_sofar = os_range_to_poly;
-  }
-  
-  if(m_closing) {
-    if(os_range_to_poly < m_cpa_rng_sofar)
+  if(tow_sys_valid) 
+  {
+    // Part 4A: Check for CPA Event
+    bool cpa_event = false;
+    if((m_cpa_rng_sofar < 0) || (m_fpa_rng_sofar < 0)) {
       m_cpa_rng_sofar = os_range_to_poly;
-    if(os_range_to_poly > (m_cpa_rng_sofar + 1)) {
-      m_closing = false;
-      cpa_event = true;
       m_fpa_rng_sofar = os_range_to_poly;
     }
-  }
-  else {
-    if(os_range_to_poly > m_fpa_rng_sofar)
-      m_fpa_rng_sofar = os_range_to_poly;
-    if(os_range_to_poly < (m_fpa_rng_sofar - 1)) {
-      m_closing = true;
-      m_cpa_rng_sofar = os_range_to_poly;
+    
+    if(m_closing) {
+      if(os_range_to_poly < m_cpa_rng_sofar)
+        m_cpa_rng_sofar = os_range_to_poly;
+      if(os_range_to_poly > (m_cpa_rng_sofar + 1)) {
+        m_closing = false;
+        cpa_event = true;
+        m_fpa_rng_sofar = os_range_to_poly;
+      }
     }
-  }
+    else {
+      if(os_range_to_poly > m_fpa_rng_sofar)
+        m_fpa_rng_sofar = os_range_to_poly;
+      if(os_range_to_poly < (m_fpa_rng_sofar - 1)) {
+        m_closing = true;
+        m_cpa_rng_sofar = os_range_to_poly;
+      }
+    }
 
-  // Part 4B: If CPA event observed, post CPA flags if any
-  // NOTE: When posting CPA events, the $[CPA] macro will expand to the CPA
-  //       value for this encounter. Otherwise $[CPA] is min CPA ever.
-  if((cpa_event) && (os_range_to_poly < m_obship_model.getPwtOuterDist())) {
-    m_cpa_reported = m_cpa_rng_sofar;
-    postFlags(m_cpa_flags);
-    m_cpa_reported = m_cpa_rng_ever;
+    // Part 4B: If CPA event observed, post CPA flags if any
+    if((cpa_event) && (os_range_to_poly < m_obship_model.getPwtOuterDist())) {
+      m_cpa_reported = m_cpa_rng_sofar;
+      postFlags(m_cpa_flags);
+      m_cpa_reported = m_cpa_rng_ever;
+    }
   }
+  // else: strict tow-only -> no CPA tracking/events when tow pose is missing
+
 
   // =================================================================
   // Part 5: Completion based on ACTUAL tow (truth), not eval point
@@ -650,17 +671,33 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
 
   // Visualization: show both the tow actual pose and the tow eval/lead pose.
 
-  XYPoint tow_act(m_towed_x, m_towed_y);
-  tow_act.set_label("tow_act");
-  tow_act.set_color("vertex", "yellow");
-  tow_act.set_vertex_size(3);
-  postMessage("VIEW_POINT", tow_act.get_spec());
+  if(m_tow_pose_valid) 
+  {
+    XYPoint tow_act(m_towed_x, m_towed_y);
+    tow_act.set_label("tow_act");
+    tow_act.set_color("vertex", "yellow");
+    tow_act.set_vertex_size(3);
+    postMessage("VIEW_POINT", tow_act.get_spec());
 
-  XYPoint tow_eval(m_tow_x_eval, m_tow_y_eval);
-  tow_eval.set_label("tow_eval");
-  tow_eval.set_color("vertex", "orange");
-  tow_eval.set_vertex_size(3);
-  postMessage("VIEW_POINT", tow_eval.get_spec());
+    XYPoint tow_eval(m_tow_x_eval, m_tow_y_eval);
+    tow_eval.set_label("tow_eval");
+    tow_eval.set_color("vertex", "orange");
+    tow_eval.set_vertex_size(3);
+    postMessage("VIEW_POINT", tow_eval.get_spec());
+  }
+  else {
+    // Clear/disable points so stale markers don't linger during tow dropouts
+    XYPoint tow_act(0, 0);
+    tow_act.set_label("tow_act");
+    tow_act.set_active(false);
+    postMessage("VIEW_POINT", tow_act.get_spec());
+
+    XYPoint tow_eval(0, 0);
+    tow_eval.set_label("tow_eval");
+    tow_eval.set_active(false);
+    postMessage("VIEW_POINT", tow_eval.get_spec());
+  }
+
 }
 
 //---------------------------------------------------------------
@@ -738,7 +775,6 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
   // If tow pose is valid, evaluate CPA/risk using the tow state as the modeled body.
   // Defensive fallback only: in tow-only behavior, relevance gating should prevent
   // reaching this branch unless tow pose is unavailable.
-
 
   if(m_tow_pose_valid) 
   {
