@@ -2,8 +2,8 @@
 /*    NAME: Tom Monaghan                                    */
 /*    ORGN: MIT, Cambridge MA                               */
 /*    FILE: Towing.cpp                                      */
-/*    DATE: December 29th, 1963                             */
-/*    Simple Mass Spring Damper Model                       */
+/*    DATE: February 6th, 2026                              */
+/*    Simple Spring Drag Clamp Model                        */
 /************************************************************/
 
 #include <iterator>
@@ -83,6 +83,17 @@ bool Towing::OnNewMail(MOOSMSG_LIST &NewMail)
 
      else if(key == "NAV_SPEED") 
        m_nav_speed = msg.GetDouble();
+
+     else if(key == "TOW_CABLE_LENGTH")
+       m_cable_length = msg.GetDouble();
+     else if(key == "TOW_ATTACH_OFFSET")
+       m_attach_offset = msg.GetDouble();
+     else if(key == "TOW_SPRING_STIFFNESS")
+       m_spring_stiffness = msg.GetDouble();
+     else if(key == "TOW_DRAG_COEFF")
+       m_cd = msg.GetDouble();
+     else if(key == "TOW_TAN_DAMPING")
+       m_tan_damping = msg.GetDouble();
 
      else if(key != "APPCAST_REQ") // handled by AppCastingMOOSApp
        reportRunWarning("Unhandled Mail: " + key);
@@ -392,6 +403,13 @@ bool Towing::OnStartUp()
     if(!handled)
       reportUnhandledConfigWarning(orig);
 
+    // Publish tow dynamics parameters for BHV_TowObstacleAvoid
+    Notify("TOW_CABLE_LENGTH",    m_cable_length);
+    Notify("TOW_ATTACH_OFFSET",   m_attach_offset);
+    Notify("TOW_SPRING_STIFFNESS", m_spring_stiffness);
+    Notify("TOW_DRAG_COEFF",      m_cd);
+    Notify("TOW_TAN_DAMPING",     m_tan_damping);
+
   }
   
   registerVariables();	
@@ -408,6 +426,11 @@ void Towing::registerVariables()
   Register("NAV_Y", 0);
   Register("NAV_HEADING", 0);
   Register("NAV_SPEED", 0);
+  Register("TOW_CABLE_LENGTH", 0);
+  Register("TOW_ATTACH_OFFSET", 0);
+  Register("TOW_SPRING_STIFFNESS", 0);
+  Register("TOW_DRAG_COEFF", 0);
+  Register("TOW_TAN_DAMPING", 0);
 }
 
 
@@ -445,3 +468,5 @@ std::string Towing::join(const vector<string> &vec, const string &delim)
   }
   return result;
 }
+
+//if we want cable length to change dynamically, we can create an app that calulates it at a specific depth.

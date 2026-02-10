@@ -133,15 +133,15 @@ protected: // State variables
   double m_tow_xy_sync_eps;
 
   //tow dynamics
-  double m_cable_length   = 30;
-  double m_attach_offset  = 0;
-  double m_k_spring       = 5;
-  double m_cd             = 0.7;
-  double m_c_tan          = 2.0;
+  double m_cable_length;
+  double m_attach_offset;
+  double m_k_spring;
+  double m_cd;
+  double m_c_tan;
 
-  double m_sim_dt = 0.1;
-  double m_sim_horizon = -1;        // use allowable_ttc if <0
-  double m_turn_rate_max = 15.0;    // deg/sec (tune)
+  double m_sim_dt;
+  double m_sim_horizon;
+  double m_turn_rate_max;
 
 protected:
   HintHolder m_hints;
