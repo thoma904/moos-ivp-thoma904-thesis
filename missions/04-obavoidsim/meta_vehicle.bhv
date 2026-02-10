@@ -140,11 +140,7 @@ Behavior=BHV_TowObstacleAvoid
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
 
-  //use_tow = true
-  //use_tow_cable = false  // if you want cable sampling
-  //cable_sample_step = 1.0
-  tow_pad = 1.0
-  //tow_only = true
+  tow_pad = 10.0
 }
 
 Behavior = BHV_Towing
@@ -159,17 +155,3 @@ Behavior = BHV_Towing
   base_width    = 180
   summit_delta  = 30
 }
-
-//Behavior = BHV_MemoryTurnLimit
-//{
-  // General Behavior Parameters
-  // ---------------------------
-  //name = mem_turn_limit // default
-  //pwt = 100 // default
-  //condition = MODE==TRANSITING
-  //updates = MEM_TURN_UPDATES // example
-  // Parameters specific to this behavior
-  // ------------------------------------
-  //memory_time = 60 // example (seconds)
-  //turn_range = 30 // example (degrees)
-//}
