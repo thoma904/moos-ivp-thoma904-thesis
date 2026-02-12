@@ -140,20 +140,7 @@ Behavior=BHV_TowObstacleAvoid
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
 
-  tow_pad = 10.0
-}
-
-Behavior = BHV_Towing
-{
-  name          = towing
-  pwt           = 100             
-  condition     = Deploy = true
-
-  // optional tweaks (defaults shown)
-  obstacle_var  = OBM_TOW_GUTS
-  peak_width    = 30
-  base_width    = 180
-  summit_delta  = 30
+  tow_pad = 1.0
 }
 
 Behavior=BHV_AvoidObstacleV24
