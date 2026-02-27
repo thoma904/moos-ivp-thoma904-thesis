@@ -53,6 +53,7 @@ protected: // Local Utility functions
                                                     bool tow_vel_valid,
                                                     double tow_vx, double tow_vy,
                                                     double fallback_hdg) const;
+  bool towObstacleAbaftBeam(double deg_abaft) const;
 
 protected:
   ObShipModelV24 m_obship_model;
@@ -75,6 +76,7 @@ protected: // Configuration parameters
 
   //Tow Specific Additions
   double m_tow_pad;
+  double m_abaft_beam_thresh;  // degrees abaft the beam for bearing-based completion (-1 = disabled)
 
 protected: // State variables
   double  m_obstacle_relevance;

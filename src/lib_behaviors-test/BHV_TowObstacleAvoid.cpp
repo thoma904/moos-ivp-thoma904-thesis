@@ -72,7 +72,8 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   //Tow Specific Additions
 
-  m_tow_pad      = 0.0;
+  m_tow_pad           = 0.0;
+  m_abaft_beam_thresh = -1;  // disabled by default; set via abaft_beam_thresh param
   m_towed_x      = 0;
   m_towed_y      = 0;
 
@@ -234,6 +235,19 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if((param == "tow_pad") && non_neg_number) {
     m_tow_pad = dval;
+    return(true);
+  }
+
+  else if(param == "abaft_beam_thresh") {
+    // Degrees abaft the beam at which the obstacle is considered no longer a threat.
+    // Range [0, 90). Use -1 (or omit) to disable bearing-based completion.
+    if(val == "off" || val == "disabled") {
+      m_abaft_beam_thresh = -1;
+      return(true);
+    }
+    if(!isNumber(val) || dval < 0 || dval >= 90)
+      return(false);
+    m_abaft_beam_thresh = dval;
     return(true);
   }
 
@@ -684,18 +698,22 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   // =================================================================
   // Part 5: Completion based on ACTUAL tow (truth), not eval point
   // =================================================================
-  // Completion uses tow TRUTH range when tow pose is available.
-  // If tow pose is not valid, completion is not evaluated (tow-only semantics).
+  // Two criteria (either sufficient, both require valid tow pose):
+  //   1. Distance: actual tow-to-obstacle range exceeds completed_dist
+  //   2. Bearing:  obstacle centroid is > abaft_beam_thresh degrees abaft
+  //               the tow's beam (obstacle is now behind the tow system)
 
   double complete_rng = -1;
 
-  if(m_tow_pose_valid && (m_rng_tow_actual >= 0)) 
+  if(m_tow_pose_valid && (m_rng_tow_actual >= 0))
     complete_rng = m_rng_tow_actual;
 
-  if(complete_rng > m_obship_model.getCompletedDist()) 
-  {
+  bool dist_clear    = (complete_rng > m_obship_model.getCompletedDist());
+  bool bearing_clear = (m_tow_pose_valid && (m_abaft_beam_thresh >= 0) &&
+                        towObstacleAbaftBeam(m_abaft_beam_thresh));
+
+  if(dist_clear || bearing_clear)
     m_resolved_pending = true;
-  }
 
   if(!m_holonomic_ok) 
   {
@@ -965,7 +983,7 @@ double BHV_TowObstacleAvoid::getRelevance()
     }
   }
 
-  else
+  else if(range_relevance < 0.4)
     m_side_lock = "";
   
   // Part 2: Possibly apply the grade scale to the raw distance
@@ -1320,6 +1338,44 @@ double BHV_TowObstacleAvoid::computeRangeRelevanceFromRange(double range) const
 }
 
 //-----------------------------------------------------------
+// Procedure: towObstacleAbaftBeam()
+//   Purpose: Returns true when the obstacle centroid bearing from the tow is
+//            more than deg_abaft degrees abaft the tow's beam, meaning the
+//            obstacle has passed behind the tow system and is no longer a threat.
+//            Heading priority: filtered position-derived velocity → raw TOWED_VX/VY
+//            → vessel heading (fallback).
+
+bool BHV_TowObstacleAvoid::towObstacleAbaftBeam(double deg_abaft) const
+{
+  // Choose tow heading
+  double tow_hdg = m_obship_model.getOSH();  // fallback: vessel heading
+  if(m_tow_vel_valid) {
+    double spd = hypot(m_tow_vx_filt, m_tow_vy_filt);
+    if(spd > 1e-6)
+      tow_hdg = relAng(0, 0, m_tow_vx_filt, m_tow_vy_filt);
+  }
+  else if(m_towed_vel_valid) {
+    double spd = hypot(m_towed_vx, m_towed_vy);
+    if(spd > 1e-6)
+      tow_hdg = relAng(0, 0, m_towed_vx, m_towed_vy);
+  }
+
+  // Obstacle centroid
+  XYPolygon gut_poly = m_obship_model.getGutPoly();
+  double obs_x = gut_poly.get_centroid_x();
+  double obs_y = gut_poly.get_centroid_y();
+
+  // Absolute compass bearing from tow to obstacle centroid
+  double abs_bearing = relAng(m_towed_x, m_towed_y, obs_x, obs_y);
+
+  // Relative bearing in [-180, 180]: 0=ahead, ±90=beam, ±180=astern
+  double rel_bearing = angle180(abs_bearing - tow_hdg);
+
+  // Abaft the beam by deg_abaft: |rel_bearing| > 90 + deg_abaft
+  return(fabs(rel_bearing) > (90.0 + deg_abaft));
+}
+
+//------------------------------------------------------------
 // Procedure: getPassingSideTowAware()
 //   Purpose: Determine passing side using a temporary ObShipModel with its pose
 //            overridden to the tow position (and tow heading if velocity is valid).
