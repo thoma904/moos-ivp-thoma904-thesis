@@ -71,6 +71,7 @@ protected:
 
   //Towing specific additions
   double distPointToPolySystem(const XYPolygon& poly, double& d_nav, double& d_tow, double& d_cable) const;
+  bool   obstacleAbaftTowBeam(const XYPolygon& poly) const;
   
 private: // Configuration variables
   std::string  m_point_var;            // incoming points
@@ -148,12 +149,22 @@ private: // State variables
   bool m_towed_x_rcvd;
   bool m_towed_y_rcvd;
 
+  // Tow heading (for bearing-based clearance)
+  double m_nav_hdg;
+  double m_towed_vx;
+  double m_towed_vy;
+  bool   m_towed_vx_rcvd;
+  bool   m_towed_vy_rcvd;
+
   // Cable distance approximation
   bool   m_use_tow_cable;
   double m_cable_sample_step;     // meters (e.g., 0.5 or 1.0)
 
   // Optional safety pad (meters)
   double m_tow_pad;
+
+  // Bearing-based obstacle clearance (-1 = disabled)
+  double m_abaft_beam_thresh;
 
   double m_repost_interval; // seconds (0 = off)
   std::map<std::string, double> m_last_post_time;

@@ -91,6 +91,14 @@ TowObstacleMgr::TowObstacleMgr()
   m_tow_pose_valid = false;
   m_towed_x_rcvd   = false;
   m_towed_y_rcvd   = false;
+
+  m_nav_hdg       = 0;
+  m_towed_vx      = 0;
+  m_towed_vy      = 0;
+  m_towed_vx_rcvd = false;
+  m_towed_vy_rcvd = false;
+
+  m_abaft_beam_thresh = -1;  // disabled by default
 }
 
 //---------------------------------------------------------
@@ -160,6 +168,21 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
         string dep = tolower(stripBlankEnds(sval));
         m_tow_deployed = (dep=="true" || dep=="yes" || dep=="1");
       }
+      handled = true;
+    }
+
+    else if(key == "NAV_HEADING") {
+      m_nav_hdg = dval;
+      handled = true;
+    }
+    else if(key == "TOWED_VX") {
+      m_towed_vx      = dval;
+      m_towed_vx_rcvd = true;
+      handled = true;
+    }
+    else if(key == "TOWED_VY") {
+      m_towed_vy      = dval;
+      m_towed_vy_rcvd = true;
       handled = true;
     }
 
@@ -321,6 +344,25 @@ bool TowObstacleMgr::OnStartUp()
     else if(param == "tow_only")
       handled = setBooleanOnString(m_tow_only, value);
 
+    else if(param == "abaft_beam_thresh") {
+      // Degrees abaft the beam at which an obstacle is considered cleared.
+      // Use -1 or omit to disable. Valid range: [0, 90).
+      if(value == "off" || value == "disabled") {
+        m_abaft_beam_thresh = -1;
+        handled = true;
+      }
+      else {
+        double thresh = atof(value.c_str());
+        if(isNumber(value) && thresh >= 0 && thresh < 90) {
+          m_abaft_beam_thresh = thresh;
+          handled = true;
+        }
+      }
+    }
+
+    else if(param == "alert_var")
+      handled = setNonWhiteVarOnString(m_alert_var, value);
+
     if(!handled)
       reportUnhandledConfigWarning(orig);
   }
@@ -357,6 +399,9 @@ void TowObstacleMgr::registerVariables()
   Register("TOWED_X",0);
   Register("TOWED_Y",0);
   Register("TOW_DEPLOYED",0);
+  Register("NAV_HEADING",0);
+  Register("TOWED_VX",0);
+  Register("TOWED_VY",0);
 
   // Register for any variables involved in the MailFlagSet
   vector<string> mflag_vars = m_mfset.getMailFlagKeys();
@@ -808,7 +853,7 @@ bool TowObstacleMgr::handleMailAlertRequest(string request)
     return(false);
 
   // Alert request is valid, go ahead and set 
-  m_alert_var = update_var;
+  //m_alert_var = update_var;
   m_alert_name = name;
   m_alert_range = d_alert_range;
 
@@ -1101,6 +1146,36 @@ void TowObstacleMgr::updatePolyRanges()
 }
 
 //------------------------------------------------------------
+// Procedure: obstacleAbaftTowBeam()
+//   Purpose: Returns true when the obstacle centroid bearing from the tow
+//            exceeds m_abaft_beam_thresh degrees abaft the tow's beam.
+//            Uses TOWED_VX/VY for tow heading when available, else NAV_HEADING.
+
+bool TowObstacleMgr::obstacleAbaftTowBeam(const XYPolygon& poly) const
+{
+  // Choose tow heading: prefer tow velocity, fall back to vessel heading
+  double tow_hdg = m_nav_hdg;
+  if(m_towed_vx_rcvd && m_towed_vy_rcvd) {
+    double spd = hypot(m_towed_vx, m_towed_vy);
+    if(spd > 1e-6)
+      tow_hdg = relAng(0, 0, m_towed_vx, m_towed_vy);
+  }
+
+  // Obstacle centroid
+  double obs_x = poly.get_centroid_x();
+  double obs_y = poly.get_centroid_y();
+
+  // Absolute compass bearing from tow to obstacle centroid
+  double abs_bearing = relAng(m_towed_x, m_towed_y, obs_x, obs_y);
+
+  // Relative bearing in [-180, 180]: 0=ahead, ±90=beam, ±180=astern
+  double rel_bearing = angle180(abs_bearing - tow_hdg);
+
+  // Abaft the beam by m_abaft_beam_thresh degrees: |rel_bearing| > 90 + thresh
+  return(fabs(rel_bearing) > (90.0 + m_abaft_beam_thresh));
+}
+
+//------------------------------------------------------------
 // Procedure: manageMemory()
 
 void TowObstacleMgr::manageMemory()
@@ -1117,6 +1192,10 @@ void TowObstacleMgr::manageMemory()
     // Keep original behavior: inactive poly means remove no matter what
     if(p->second.getPoly().active() == false)
       remove = true;
+
+    // Bearing-based clearance: obstacle centroid is abaft the tow's beam
+    if(!remove && (m_abaft_beam_thresh >= 0) && m_tow_pose_valid)
+      remove = obstacleAbaftTowBeam(p->second.getPoly());
 
     if(remove)
       keys_to_forget.insert(key);
