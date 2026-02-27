@@ -123,15 +123,15 @@ Behavior=BHV_TowObstacleAvoid
   pwt        = 1000
   condition  = DEPLOY = true
 	templating = spawn
-  updates    = OBSTACLE_ALERT
+  updates    = TOW_OBSTACLE_ALERT
 
        use_refinery = true
       allowable_ttc = 10
 	min_util_cpa_dist = 2.5
 	max_util_cpa_dist = 5
-     pwt_outer_dist = 45
+     pwt_outer_dist = 60
      pwt_inner_dist = 5
-     completed_dist = 50
+     completed_dist = 65
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
@@ -141,6 +141,7 @@ Behavior=BHV_TowObstacleAvoid
 	visual_hints = gut_poly_edge_color = yellow
 
   tow_pad = 1.0
+  abaft_beam_thresh = 20
 }
 
 Behavior=BHV_AvoidObstacleV24

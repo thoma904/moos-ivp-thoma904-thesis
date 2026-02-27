@@ -186,16 +186,18 @@ ProcessConfig = pTowObstacleMgr
 	
 	given_max_duration = 1000
 
-	general_alert = update_var=GEN_ALERT, alert_range=40000
+	general_alert = update_var=GEN_ALERT, alert_range=400000
+
+  alert_var = TOW_OBSTACLE_ALERT
 
   max_age_per_point = 20
 
   //Tow Specific Additions
   use_tow = true
-  use_tow_cable = false
+  use_tow_cable = true
   cable_sample_step = 1
   tow_pad = 0.5
-	
+	abaft_beam_thresh = 20
 } 
 
 //--------------------------------------------------
