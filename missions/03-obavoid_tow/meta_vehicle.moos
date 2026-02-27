@@ -187,6 +187,8 @@ ProcessConfig = pTowObstacleMgr
 
   max_age_per_point = 120
 
+  abaft_beam_thresh = 20
+
   //Tow Specific Additions
   use_tow = true
   use_tow_cable = false

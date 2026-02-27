@@ -138,6 +138,7 @@ Behavior=BHV_TowObstacleAvoid
 	visual_hints = gut_poly_edge_color = yellow
 
   tow_pad = 1.0
+  abaft_beam_thresh = 20
 }
 
 Behavior=BHV_AvoidObstacleV24
