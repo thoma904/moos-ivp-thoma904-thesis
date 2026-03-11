@@ -17,6 +17,7 @@
 #include "AOF.h"
 #include "ObShipModelV24.h"
 #include "XYPolygon.h"
+#include <vector>
 
 class IvPDomain;
 class AOF_TowObstacleAvoid: public AOF {
@@ -75,6 +76,16 @@ public:
                            double &tx, double &ty,
                            double &tvx, double &tvy) const;
   double applyTowSpeedPenalty(double util, double tow_spd_metric) const;
+  void propagateCableOneStep(
+    double ax, double ay,   // anchor (node 0, pinned)
+    double tx, double ty,   // tow body (last node, pinned)
+    double dt,
+    int num_nodes,
+    double rest_length,
+    std::vector<double> &nx_arr,
+    std::vector<double> &ny_arr,
+    std::vector<double> &nvx_arr,
+    std::vector<double> &nvy_arr) const;
 
  private:
   // Tow state (position and velocity at eval start)

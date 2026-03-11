@@ -160,37 +160,38 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
 
   XYPolygon gut = m_obship_model.getGutPoly();
 
-  // Track minimum tow-to-obstacle distance over the horizon
-  double min_dist = 1e9;
+  // Compute cable node layout (mirrors Cable.cpp logic)
+  int num_nodes;
+  if(m_cable_length < 30.0)
+    num_nodes = 3;
+  else
+    num_nodes = std::max(3, (int)(m_cable_length / 10.0));
+  double rest_length = m_cable_length / (double)(num_nodes - 1);
 
-  // Check initial tow position; if already inside, return minimum utility
-  double d0 = gut.dist_to_poly(tx, ty);
-  if(d0 < 0) d0 = 0;
-  min_dist = std::min(min_dist, d0);
-  if(min_dist <= 0)
-    return(getKnownMin());
+  // Initialize node arrays — straight line from initial anchor to tow body
+  vector<double> n_x(num_nodes), n_y(num_nodes);
+  vector<double> n_vx(num_nodes, 0.0), n_vy(num_nodes, 0.0);
 
-  // Check initial cable (anchor to tow) for obstacle proximity
   double hdg_rad0 = (90.0 - osh) * M_PI / 180.0;
   double ax0 = osx - m_attach_offset * cos(hdg_rad0);
   double ay0 = osy - m_attach_offset * sin(hdg_rad0);
-  if(m_cable_sample_step > 0.1) {
-    double cx0 = tx - ax0;
-    double cy0 = ty - ay0;
-    double clen0 = std::hypot(cx0, cy0);
-    if(clen0 > m_cable_sample_step) {
-      int samples0 = (int)ceil(clen0 / m_cable_sample_step);
-      for(int s = 1; s < samples0; s++) {
-        double frac = (double)s / (double)samples0;
-        double sx = ax0 + frac * cx0;
-        double sy = ay0 + frac * cy0;
-        double ds = gut.dist_to_poly(sx, sy);
-        if(ds < 0) ds = 0;
-        min_dist = std::min(min_dist, ds);
-        if(min_dist <= 0)
-          return(getKnownMin());
-      }
-    }
+
+  for(int i = 0; i < num_nodes; i++) {
+    double t = (double)i / (double)(num_nodes - 1);
+    n_x[i] = ax0 + t * (tx - ax0);
+    n_y[i] = ay0 + t * (ty - ay0);
+  }
+
+  // Track minimum tow-to-obstacle distance over the horizon
+  double min_dist = 1e9;
+
+  // Check all initial cable nodes for obstacle proximity (replaces straight-line sampling)
+  for(int i = 0; i < num_nodes; i++) {
+    double ds = gut.dist_to_poly(n_x[i], n_y[i]);
+    if(ds < 0) ds = 0;
+    min_dist = std::min(min_dist, ds);
+    if(min_dist <= 0)
+      return(getKnownMin());
   }
 
   // Forward simulation of vessel + tow dynamics
@@ -220,7 +221,8 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     double ax = osx - m_attach_offset * cos(hdg_rad);
     double ay = osy - m_attach_offset * sin(hdg_rad);
 
-    // Propagate tow dynamics (matches pTowing physics)
+    // Step 1: Advance the tow body endpoint (matches pTowing physics)
+    // This gives us the new tx/ty to use as the pinned last node
     propagateTowOneStep(ax, ay, dt, tx, ty, tvx, tvy);
 
     // Track minimum predicted tow speed
@@ -228,30 +230,25 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     if(tow_spd < min_tow_spd)
       min_tow_spd = tow_spd;
 
-    // Measure tow-to-obstacle distance
-    double d = gut.dist_to_poly(tx, ty);
-    if(d < 0) d = 0;
-    min_dist = std::min(min_dist, d);
+    // Step 2: Advance the full cable shape using the updated endpoint
+    // (mirrors Cable.cpp interior node dynamics)
+    propagateCableOneStep(ax, ay, tx, ty, dt, num_nodes, rest_length,
+                          n_x, n_y, n_vx, n_vy);
 
-    // Sample along cable (anchor to tow) every N sim steps
-    if(min_dist > 0 && m_cable_sample_step > 0.1 &&
-       (k % m_cable_check_interval == 0)) {
-      double cx = tx - ax;
-      double cy = ty - ay;
-      double cable_len = std::hypot(cx, cy);
-      if(cable_len > m_cable_sample_step) {
-        int samples = (int)ceil(cable_len / m_cable_sample_step);
-        for(int s = 1; s < samples; s++) {
-          double frac = (double)s / (double)samples;
-          double sx = ax + frac * cx;
-          double sy = ay + frac * cy;
-          double ds = gut.dist_to_poly(sx, sy);
-          if(ds < 0) ds = 0;
-          min_dist = std::min(min_dist, ds);
-          if(min_dist <= 0)
-            break;
-        }
+    // Check all cable nodes against obstacle every N steps
+    // Always check every step if we're close (min_dist is small)
+    if(k % m_cable_check_interval == 0 || min_dist < 5.0) {
+      for(int i = 0; i < num_nodes; i++) {
+        double d = gut.dist_to_poly(n_x[i], n_y[i]);
+        if(d < 0) d = 0;
+        min_dist = std::min(min_dist, d);
+        if(min_dist <= 0) break;
       }
+    } else {
+      // Between full checks, always check the tow body endpoint
+      double d = gut.dist_to_poly(tx, ty);
+      if(d < 0) d = 0;
+      min_dist = std::min(min_dist, d);
     }
 
     if(min_dist <= 0)
@@ -413,6 +410,118 @@ void AOF_TowObstacleAvoid::propagateTowOneStep(double ax, double ay, double dt,
     if(vrad < 0) {
       tvx -= vrad * urx;
       tvy -= vrad * ury;
+    }
+  }
+} 
+
+void AOF_TowObstacleAvoid::propagateCableOneStep(
+    double ax, double ay,   // anchor (node 0, pinned)
+    double tx, double ty,   // tow body (last node, pinned)
+    double dt,
+    int num_nodes,
+    double rest_length,
+    vector<double> &nx_arr,
+    vector<double> &ny_arr,
+    vector<double> &nvx_arr,
+    vector<double> &nvy_arr) const
+{
+  dt = std::max(dt, 1e-3);
+
+  // Pin endpoints
+  nx_arr[0]  = ax;  ny_arr[0]  = ay;
+  nvx_arr[0] = 0;   nvy_arr[0] = 0;
+  nx_arr[num_nodes-1]  = tx;  ny_arr[num_nodes-1]  = ty;
+  nvx_arr[num_nodes-1] = 0;   nvy_arr[num_nodes-1] = 0;
+
+  // Interior node dynamics — mirrors Cable.cpp exactly
+  for(int i = 1; i < num_nodes - 1; i++) {
+    // Spring from previous neighbor
+    double dx_prev = nx_arr[i-1] - nx_arr[i];
+    double dy_prev = ny_arr[i-1] - ny_arr[i];
+    double dist_prev = hypot(dx_prev, dy_prev);
+    if(dist_prev > 0.01 && dist_prev > rest_length && m_k_spring > 0) {
+      double ux = dx_prev / dist_prev;
+      double uy = dy_prev / dist_prev;
+      double overshoot = dist_prev - rest_length;
+      nvx_arr[i] += m_k_spring * overshoot * ux * dt;
+      nvy_arr[i] += m_k_spring * overshoot * uy * dt;
+    }
+
+    // Spring from next neighbor
+    double dx_next = nx_arr[i+1] - nx_arr[i];
+    double dy_next = ny_arr[i+1] - ny_arr[i];
+    double dist_next = hypot(dx_next, dy_next);
+    if(dist_next > 0.01 && dist_next > rest_length && m_k_spring > 0) {
+      double ux = dx_next / dist_next;
+      double uy = dy_next / dist_next;
+      double overshoot = dist_next - rest_length;
+      nvx_arr[i] += m_k_spring * overshoot * ux * dt;
+      nvy_arr[i] += m_k_spring * overshoot * uy * dt;
+    }
+
+    // Quadratic drag
+    double speed = hypot(nvx_arr[i], nvy_arr[i]);
+    if(speed > 1e-6 && m_cd > 0) {
+      nvx_arr[i] += -m_cd * nvx_arr[i] * speed * dt;
+      nvy_arr[i] += -m_cd * nvy_arr[i] * speed * dt;
+    }
+
+    // Tangential damping
+    if(m_c_tan > 0) {
+      double cx   = nx_arr[i+1] - nx_arr[i-1];
+      double cy   = ny_arr[i+1] - ny_arr[i-1];
+      double clen = hypot(cx, cy);
+      if(clen > 1e-6) {
+        double utx = cx / clen;
+        double uty = cy / clen;
+        double perpx = -uty;
+        double perpy =  utx;
+        double vn = nvx_arr[i] * perpx + nvy_arr[i] * perpy;
+        nvx_arr[i] += (-m_c_tan * vn) * perpx * dt;
+        nvy_arr[i] += (-m_c_tan * vn) * perpy * dt;
+      }
+    }
+
+    // Euler integration
+    nx_arr[i] += nvx_arr[i] * dt;
+    ny_arr[i] += nvy_arr[i] * dt;
+  }
+
+  // Forward constraint pass
+  for(int i = 1; i < num_nodes - 1; i++) {
+    double dx   = nx_arr[i-1] - nx_arr[i];
+    double dy   = ny_arr[i-1] - ny_arr[i];
+    double dist = hypot(dx, dy);
+    if(dist > rest_length && dist > 1e-9) {
+      double sc = rest_length / dist;
+      nx_arr[i] = nx_arr[i-1] - dx * sc;
+      ny_arr[i] = ny_arr[i-1] - dy * sc;
+      double urx = dx / dist;
+      double ury = dy / dist;
+      double vrad = nvx_arr[i] * urx + nvy_arr[i] * ury;
+      if(vrad < 0) {
+        nvx_arr[i] -= vrad * urx;
+        nvy_arr[i] -= vrad * ury;
+      }
+    }
+  }
+
+  // Backward constraint pass
+  for(int i = num_nodes - 2; i >= 1; i--) {
+    double dx   = nx_arr[i+1] - nx_arr[i];
+    double dy   = ny_arr[i+1] - ny_arr[i];
+    double dist = hypot(dx, dy);
+    if(dist > rest_length && dist > 1e-9) {
+      double sc = rest_length / dist;
+      nx_arr[i] = nx_arr[i+1] - dx * sc;
+      ny_arr[i] = ny_arr[i+1] - dy * sc;
+      double urx = dx / dist;
+      double ury = dy / dist;
+      double vrad = nvx_arr[i] * urx + nvy_arr[i] * ury;
+      if(vrad < 0) {
+        nvx_arr[i] -= vrad * urx;
+        nvy_arr[i] -= vrad * ury;
+      }
     }
   }
 }
