@@ -172,17 +172,17 @@ ProcessConfig = pObstacleMgr
 
 ProcessConfig = pTowObstacleMgr
 {
-  AppTick   = 4 
-  CommsTick = 4 
+  AppTick   = 4
+  CommsTick = 4
 
-  point_var = TRACKED_FEATURE 
+  point_var = TRACKED_FEATURE
 
 	app_logging = true
-	
+
 	//obstacles_color = $(VCOLOR)
 	obstacles_color = green
 
-	post_view_polys = false
+	post_view_polys = true
 	
 	given_max_duration = 1000
 
@@ -190,7 +190,7 @@ ProcessConfig = pTowObstacleMgr
 
   alert_var = TOW_OBSTACLE_ALERT
 
-  max_age_per_point = 20
+  max_age_per_point = 90
 
   //Tow Specific Additions
   use_tow = true
