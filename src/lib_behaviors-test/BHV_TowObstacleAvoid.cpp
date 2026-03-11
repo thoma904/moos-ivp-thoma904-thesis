@@ -265,6 +265,11 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
     return(true);
   }
 
+  else if((param == "sim_horizon") && isNumber(val) && dval > 0) {
+    m_sim_horizon = dval;
+    return(true);
+  }
+
   else
     return(false);
 
@@ -459,6 +464,9 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   // If valid, it is used for (1) lead-point prediction and (2) tow-heading inference
   // for refinery passing-side calculations.
 
+  double node0_x = 0;
+  double node0_y = 0;
+
   if(m_tow_pose_valid) 
   {
     // Part 2B.1: Robust tow lead-point estimation (optional)
@@ -499,6 +507,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
         newest_t = pose_time = ty_t;
       }
     }
+
 
     // If the tow pose hasn't updated recently, disable velocity projection
     bool pose_stale = ((now - newest_t) > m_tow_pose_stale);
@@ -607,6 +616,15 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
 
     XYPolygon gut_poly = m_obship_model.getGutPoly();
 
+    // Cable node 0: attachment point on vessel stern.
+    // Used as the activation/relevance reference point instead of the lead/eval point.
+    double osx = m_obship_model.getOSX();
+    double osy = m_obship_model.getOSY();
+    double osh = m_obship_model.getOSH();
+    double hdg_rad_n0 = (90.0 - osh) * M_PI / 180.0;
+    node0_x = osx - m_attach_offset * cos(hdg_rad_n0);
+    node0_y = osy - m_attach_offset * sin(hdg_rad_n0);
+
     //----------------------------------------------------
     // Tow truth range (actual tow pose) used for completion
     //----------------------------------------------------
@@ -618,18 +636,15 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     // Cable truth range: sample along anchor-to-tow for completion check
     double cable_rng_actual = tow_rng_actual;
     if(m_cable_sample_step > 0.1) {
-      double hdg_rad = (90.0 - m_osh) * M_PI / 180.0;
-      double ax = m_osx - m_attach_offset * cos(hdg_rad);
-      double ay = m_osy - m_attach_offset * sin(hdg_rad);
-      double cx = m_towed_x - ax;
-      double cy = m_towed_y - ay;
+      double cx = m_towed_x - node0_x;
+      double cy = m_towed_y - node0_y;
       double clen = std::hypot(cx, cy);
       if(clen > m_cable_sample_step) {
         int samples = (int)ceil(clen / m_cable_sample_step);
         for(int s = 1; s < samples; s++) {
           double frac = (double)s / (double)samples;
-          double sx = ax + frac * cx;
-          double sy = ay + frac * cy;
+          double sx = node0_x + frac * cx;
+          double sy = node0_y + frac * cy;
           double ds = gut_poly.dist_to_poly(sx, sy);
           if(ds < 0) ds = 0;
           ds = std::max(0.0, ds - m_tow_pad);
@@ -640,28 +655,25 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     }
     m_rng_tow_actual = std::min(tow_rng_actual, cable_rng_actual);
 
-    m_rng_tow = gut_poly.dist_to_poly(m_tow_x_eval, m_tow_y_eval);
+    // Activation range: node 0 (vessel attachment point) to obstacle.
+    // Replaces the lead/eval point — cable geometry is now the early warning mechanism.
+    m_rng_tow = gut_poly.dist_to_poly(node0_x, node0_y);
     if(m_rng_tow < 0) m_rng_tow = 0;
     m_rng_tow = std::max(0.0, m_rng_tow - m_tow_pad);
 
-    // Truth range (m_rng_tow_actual): actual tow pose to polygon (used for completion)
-    // Eval range  (m_rng_tow): lead/eval tow pose to polygon (used for relevance/system range)
-
-    // Cable range: sample along anchor-to-tow line for closest approach
+    // Cable range: sample along straight-line anchor-to-tow for closest approach.
+    // m_rng_sys = min(node0 range, cable sample range) drives relevance and TTC gate.
     double rng_cable = m_rng_tow;
     if(m_cable_sample_step > 0.1) {
-      double hdg_rad = (90.0 - m_osh) * M_PI / 180.0;
-      double ax = m_osx - m_attach_offset * cos(hdg_rad);
-      double ay = m_osy - m_attach_offset * sin(hdg_rad);
-      double cx = m_towed_x - ax;
-      double cy = m_towed_y - ay;
+      double cx = m_towed_x - node0_x;
+      double cy = m_towed_y - node0_y;
       double clen = std::hypot(cx, cy);
       if(clen > m_cable_sample_step) {
         int samples = (int)ceil(clen / m_cable_sample_step);
         for(int s = 1; s < samples; s++) {
           double frac = (double)s / (double)samples;
-          double sx = ax + frac * cx;
-          double sy = ay + frac * cy;
+          double sx = node0_x + frac * cx;
+          double sy = node0_y + frac * cy;
           double ds = gut_poly.dist_to_poly(sx, sy);
           if(ds < 0) ds = 0;
           ds = std::max(0.0, ds - m_tow_pad);
@@ -801,11 +813,11 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     tow_act.set_vertex_size(3);
     postMessage("VIEW_POINT", tow_act.get_spec());
 
-    XYPoint tow_eval(m_tow_x_eval, m_tow_y_eval);
-    tow_eval.set_label("tow_eval");
-    tow_eval.set_color("vertex", "orange");
-    tow_eval.set_vertex_size(3);
-    postMessage("VIEW_POINT", tow_eval.get_spec());
+    XYPoint cable_n0(node0_x, node0_y);
+    cable_n0.set_label("cable_n0");
+    cable_n0.set_color("vertex", "orange");
+    cable_n0.set_vertex_size(3);
+    postMessage("VIEW_POINT", cable_n0.get_spec());
   }
   else {
     // Clear/disable points so stale markers don't linger during tow dropouts
@@ -814,10 +826,10 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     tow_act.set_active(false);
     postMessage("VIEW_POINT", tow_act.get_spec());
 
-    XYPoint tow_eval(0, 0);
-    tow_eval.set_label("tow_eval");
-    tow_eval.set_active(false);
-    postMessage("VIEW_POINT", tow_eval.get_spec());
+    XYPoint cable_n0(0, 0);
+    cable_n0.set_label("cable_n0");
+    cable_n0.set_active(false);
+    postMessage("VIEW_POINT", cable_n0.get_spec());
   }
 
 }
@@ -915,7 +927,10 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
                             m_k_spring, m_cd, m_c_tan);
 
     // Optional: match simulation dt to pTowing AppTick (e.g., 0.1 for 10 Hz)
-    aof_avoid.setSimParams(m_sim_dt, -1 /*use allowable_ttc*/, m_turn_rate_max);
+    // sim_horizon controls AOF lookahead depth independently of allowable_ttc.
+    // If not set by .bhv (still -1), AOF falls back to allowable_ttc — preserved
+    // for backward compatibility, but sim_horizon should be set explicitly.
+    aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
     aof_avoid.setCableSampleStep(m_cable_sample_step);
     aof_avoid.setCableCheckInterval(m_cable_check_interval);
 
@@ -1029,6 +1044,23 @@ double BHV_TowObstacleAvoid::getRelevance()
 
   if(range_relevance <= 0)
     return(0);
+
+  // TTC gate: allowable_ttc now controls *when* to engage, not how far to simulate.
+  // Compute time-to-contact from tow eval range and tow body speed.
+  // Use tow body speed if valid, otherwise fall back to ownship speed.
+  double allowable_ttc = m_obship_model.getAllowableTTC();
+  if(allowable_ttc > 0) {
+    double tow_spd = 0;
+    if(m_towed_vel_valid)
+      tow_spd = hypot(m_towed_vx, m_towed_vy);
+    if(tow_spd < 0.1)
+      tow_spd = getBufferDoubleVal("NAV_SPEED"); // fallback to ownship speed
+    if(tow_spd > 0.1) {
+      double ttc = m_rng_sys / tow_spd;
+      if(ttc > allowable_ttc)
+        return(0);
+    }
+  }
 
   if(range_relevance > 0.6) 
   {
