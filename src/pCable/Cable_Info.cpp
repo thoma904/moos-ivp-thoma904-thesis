@@ -20,11 +20,12 @@ void showSynopsis()
 {
   blk("SYNOPSIS:                                                       ");
   blk("------------------------------------                            ");
-  blk("  The pCable application is used for               ");
-  blk("                                                                ");
-  blk("                                                                ");
-  blk("                                                                ");
-  blk("                                                                ");
+  blk("  pCable models the cable shape between the towing vessel and   ");
+  blk("  the tow body as a chain of spring-damped nodes. Complements   ");
+  blk("  pTowing1 which computes the tow body endpoint. Dynamics match ");
+  blk("  the pTowing1/AOF spring-drag-clamp model applied per segment.");
+  blk("  Publishes VIEW_SEGLIST and CABLE_NODE_REPORT for obstacle     ");
+  blk("  avoidance and visualization.                                  ");
 }
 
 //----------------------------------------------------------------
@@ -69,11 +70,16 @@ void showExampleConfigAndExit()
   blu("pCable Example MOOS Configuration                   ");
   blu("=============================================================== ");
   blk("                                                                ");
-  blk("ProcessConfig = pCable                              ");
+  blk("ProcessConfig = pCable                                          ");
   blk("{                                                               ");
-  blk("  AppTick   = 4                                                 ");
-  blk("  CommsTick = 4                                                 ");
+  blk("  AppTick   = 10                                                ");
+  blk("  CommsTick = 10                                                ");
   blk("                                                                ");
+  blk("  cable_length   = 30    // meters                              ");
+  blk("  attach_offset  = 0     // meters (stern offset from CG)       ");
+  blk("  k_spring       = 5.0   // spring constant                     ");
+  blk("  cd             = 0.7   // quadratic drag coefficient          ");
+  blk("  c_tan          = 2.0   // tangential damping coefficient      ");
   blk("}                                                               ");
   blk("                                                                ");
   exit(0);
@@ -94,12 +100,21 @@ void showInterfaceAndExit()
   blk("                                                                ");
   blk("SUBSCRIPTIONS:                                                  ");
   blk("------------------------------------                            ");
-  blk("  NODE_MESSAGE = src_node=alpha,dest_node=bravo,var_name=FOO,   ");
-  blk("                 string_val=BAR                                 ");
+  blk("  NAV_X            = double (vessel x position)                 ");
+  blk("  NAV_Y            = double (vessel y position)                 ");
+  blk("  NAV_HEADING      = double (vessel heading, degrees)           ");
+  blk("  TOWED_X          = double (tow body x, from pTowing1)        ");
+  blk("  TOWED_Y          = double (tow body y, from pTowing1)        ");
+  blk("  TOW_CABLE_LENGTH = double (dynamic cable length sync)         ");
+  blk("  TOW_ATTACH_OFFSET    = double (dynamic attach offset sync)    ");
+  blk("  TOW_SPRING_STIFFNESS = double (dynamic spring constant sync)  ");
+  blk("  TOW_DRAG_COEFF       = double (dynamic drag coeff sync)       ");
+  blk("  TOW_TAN_DAMPING      = double (dynamic tangential damp sync)  ");
   blk("                                                                ");
   blk("PUBLICATIONS:                                                   ");
   blk("------------------------------------                            ");
-  blk("  Publications are determined by the node message content.      ");
+  blk("  VIEW_SEGLIST      = cable shape for pMarineViewer             ");
+  blk("  CABLE_NODE_REPORT = nodes=N,x0=..,y0=..,x1=..,y1=..,...      ");
   blk("                                                                ");
   exit(0);
 }
