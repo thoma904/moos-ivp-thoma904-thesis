@@ -24,6 +24,7 @@ ADD_SUBDIRECTORY(pTowing1)
 ADD_SUBDIRECTORY(pTowTurnMgr)
 ADD_SUBDIRECTORY(pTowing_Circle)
 ADD_SUBDIRECTORY(pTowObstacleMgr)
+ADD_SUBDIRECTORY(pCable)
 
 ##############################################################################
 #                           END of CMakeLists.txt
