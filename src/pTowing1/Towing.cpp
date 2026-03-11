@@ -41,6 +41,7 @@ Towing::Towing()
   m_spring_stiffness = 5.0; // spring stiffness constant 1/s^2
   m_cd = 0.7;               // lumped drag coefficient 1/m
   m_tan_damping = 2.0; // tangential damping constant 1/s
+  m_post_cable = true; // whether to post the cable position for visualization
 }
 
 //---------------------------------------------------------
@@ -312,13 +313,16 @@ bool Towing::Iterate()
   */
 
   // VIEW_SEGLIST for cable
-  string cable_str = "pts={" + doubleToStringX(m_anchor_x,1) + "," +
-                              doubleToStringX(m_anchor_y,1) + ":" +
-                              doubleToStringX(m_towed_x,1) + "," +
-                              doubleToStringX(m_towed_y,1) + "}";
-  cable_str += ",label=TOW_LINE";
-  cable_str += ",edge_color=gray,edge_size=2,vertex_size=0";
-  Notify("VIEW_SEGLIST", cable_str);
+  if (m_post_cable)
+  {
+    string cable_str = "pts={" + doubleToStringX(m_anchor_x,1) + "," +
+                                doubleToStringX(m_anchor_y,1) + ":" +
+                                doubleToStringX(m_towed_x,1) + "," +
+                                doubleToStringX(m_towed_y,1) + "}";
+    cable_str += ",label=TOW_LINE";
+    cable_str += ",edge_color=gray,edge_size=2,vertex_size=0";
+    Notify("VIEW_SEGLIST", cable_str);
+  }
 
   // -----------------------
   // Publish NODE_REPORT_LOCAL for the towed body (acts like a vessel)
@@ -398,6 +402,11 @@ bool Towing::OnStartUp()
     {
       m_tan_damping = stod(value);
       handled = true;
+    }
+
+    else if(param == "post_cable")
+    {
+      handled = setBooleanOnString(m_post_cable, value);
     }
 
     if(!handled)

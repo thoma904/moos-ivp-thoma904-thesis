@@ -57,6 +57,7 @@ class Towing : public AppCastingMOOSApp
  double m_spring_stiffness; // spring stiffness constant
  double m_cd;               // drag coefficient
  double m_tan_damping; // tangential damping constant
+ bool m_post_cable;
 };
 
 #endif 
