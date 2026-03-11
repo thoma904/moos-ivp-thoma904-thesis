@@ -160,6 +160,11 @@ private: // State variables
   bool   m_use_tow_cable;
   double m_cable_sample_step;     // meters (e.g., 0.5 or 1.0)
 
+  // Cable node positions from pCable
+  std::vector<double> m_cable_node_x;
+  std::vector<double> m_cable_node_y;
+  bool m_cable_nodes_valid;
+
   // Optional safety pad (meters)
   double m_tow_pad;
 

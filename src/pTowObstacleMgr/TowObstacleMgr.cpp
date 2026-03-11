@@ -99,6 +99,8 @@ TowObstacleMgr::TowObstacleMgr()
   m_towed_vy_rcvd = false;
 
   m_abaft_beam_thresh = -1;  // disabled by default
+
+  m_cable_nodes_valid = false;
 }
 
 //---------------------------------------------------------
@@ -186,6 +188,41 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       handled = true;
     }
 
+    // Cable node positions from pCable
+    else if(key == "CABLE_NODE_REPORT") {
+      m_cable_node_x.clear();
+      m_cable_node_y.clear();
+      // Format: nodes=N,x0=..,y0=..,x1=..,y1=..,...
+      vector<string> kvs = parseString(sval, ',');
+      int num_nodes = 0;
+      for(unsigned int j=0; j<kvs.size(); j++) {
+        string param = biteStringX(kvs[j], '=');
+        string val   = kvs[j];
+        if(param == "nodes")
+          num_nodes = atoi(val.c_str());
+      }
+      // Re-parse to extract indexed x/y values
+      kvs = parseString(sval, ',');
+      m_cable_node_x.resize(num_nodes, 0);
+      m_cable_node_y.resize(num_nodes, 0);
+      for(unsigned int j=0; j<kvs.size(); j++) {
+        string kv = kvs[j];
+        string param = biteStringX(kv, '=');
+        string val   = kv;
+        if(param.size() >= 2 && param[0] == 'x') {
+          int idx = atoi(param.substr(1).c_str());
+          if(idx >= 0 && idx < num_nodes)
+            m_cable_node_x[idx] = atof(val.c_str());
+        }
+        else if(param.size() >= 2 && param[0] == 'y') {
+          int idx = atoi(param.substr(1).c_str());
+          if(idx >= 0 && idx < num_nodes)
+            m_cable_node_y[idx] = atof(val.c_str());
+        }
+      }
+      m_cable_nodes_valid = (num_nodes >= 2);
+      handled = true;
+    }
 
     else if(key == "GIVEN_OBSTACLE") 
       handled = handleGivenObstacle(sval);
@@ -402,6 +439,7 @@ void TowObstacleMgr::registerVariables()
   Register("NAV_HEADING",0);
   Register("TOWED_VX",0);
   Register("TOWED_VY",0);
+  Register("CABLE_NODE_REPORT",0);
 
   // Register for any variables involved in the MailFlagSet
   vector<string> mflag_vars = m_mfset.getMailFlagKeys();
@@ -784,7 +822,7 @@ bool TowObstacleMgr::updatePointHulls()
       poly = placeholderConvexHull(key);
     }
     
-    poly.set_label("obmgr_" + key);
+    poly.set_label("towmgr_" + key);
     p->second.setPoly(poly);
     
     if(m_post_view_polys) {
@@ -852,7 +890,17 @@ bool TowObstacleMgr::handleMailAlertRequest(string request)
   if(d_alert_range <= 0)
     return(false);
 
-  // Alert request is valid, go ahead and set 
+  // Only process requests whose update_var matches our configured
+  // alert_var.  Without this filter the vessel behaviour's
+  // OBM_ALERT_REQUEST (update_var=OBSTACLE_ALERT, name=avdobs24_)
+  // overwrites m_alert_name, causing pTowObstacleMgr to publish
+  // alerts with the vessel prefix.  The helm then refuses to spawn
+  // a second tow-avoid behaviour because a vessel behaviour with
+  // the same update_name already exists in m_bhv_names.
+  if(m_alert_var != "" && update_var != m_alert_var)
+    return(true);   // silently ignore non-matching requests
+
+  // Alert request is valid, go ahead and set
   //m_alert_var = update_var;
   m_alert_name = name;
   m_alert_range = d_alert_range;
@@ -1181,8 +1229,9 @@ bool TowObstacleMgr::obstacleAbaftTowBeam(const XYPolygon& poly) const
 void TowObstacleMgr::manageMemory()
 {
   set<string> keys_to_forget;
+  set<string> keys_to_suspend;
 
-  // Identify obstacles to forget
+  // Identify obstacles to forget or suspend
   map<string, Obstacle>::iterator p;
   for(p=m_map_obstacles.begin(); p!=m_map_obstacles.end(); p++) {
     string key  = p->first;
@@ -1193,15 +1242,20 @@ void TowObstacleMgr::manageMemory()
     if(p->second.getPoly().active() == false)
       remove = true;
 
-    // Bearing-based clearance: obstacle centroid is abaft the tow's beam
-    if(!remove && (m_abaft_beam_thresh >= 0) && m_tow_pose_valid)
-      remove = obstacleAbaftTowBeam(p->second.getPoly());
-
-    if(remove)
+    if(remove) {
       keys_to_forget.insert(key);
+      continue;
+    }
+
+    // Bearing-based clearance: obstacle centroid is abaft the tow's beam.
+    // Despawn the behavior (OBM_RESOLVED) but keep the obstacle in the
+    // map so it can re-alert on the return leg.
+    if((m_abaft_beam_thresh >= 0) && m_tow_pose_valid)
+      if(obstacleAbaftTowBeam(p->second.getPoly()))
+        keys_to_suspend.insert(key);
   }
 
-  // Free memory for obstacles flagged above
+  // Permanently erase obstacles that aged out or became inactive
   set<string>::iterator q;
   for(q=keys_to_forget.begin(); q!=keys_to_forget.end(); q++) {
     string key = *q;
@@ -1217,6 +1271,15 @@ void TowObstacleMgr::manageMemory()
 
     m_map_obstacles.erase(key);
     m_obstacles_released++;
+  }
+
+  // Suspend (despawn behavior only) for obstacles abaft the beam.
+  // Obstacle stays in the map for re-alerting on future approaches.
+  for(q=keys_to_suspend.begin(); q!=keys_to_suspend.end(); q++) {
+    string key = *q;
+    Notify("OBM_RESOLVED", key);
+    m_alerts_resolved++;
+    reportEvent("OBM_RESOLVED(suspend)=" + key);
   }
 }
 
@@ -1501,25 +1564,53 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
   // Tow distance
   d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
 
-  // Cable optional (still NAV->TOW for now; later you may swap to anchor->tow)
+  // Cable distance: use actual node positions from pCable if available,
+  // otherwise fall back to straight-line sampling between nav and tow.
   if(m_use_tow_cable) {
-    double x1 = m_nav_x,   y1 = m_nav_y;
-    double x2 = m_towed_x, y2 = m_towed_y;
-
-    double seg_len = hypot(x2 - x1, y2 - y1);
-    unsigned int samples = 1;
-    if(m_cable_sample_step > 0.1)
-      samples = (unsigned int)ceil(seg_len / m_cable_sample_step);
-    if(samples < 1) samples = 1;
-
     d_cable = 1e9;
-    for(unsigned int i=0; i<=samples; i++) {
-      double t  = (double)i / (double)samples;
-      double xs = x1 + t*(x2-x1);
-      double ys = y1 + t*(y2-y1);
-      double di = poly.dist_to_poly(xs, ys);
-      if(di < d_cable)
-        d_cable = di;
+
+    if(m_cable_nodes_valid && m_cable_node_x.size() >= 2) {
+      // Use actual cable node positions from pCable
+      for(unsigned int i=0; i<m_cable_node_x.size(); i++) {
+        double di = poly.dist_to_poly(m_cable_node_x[i], m_cable_node_y[i]);
+        if(di < d_cable)
+          d_cable = di;
+      }
+      // Also sample between adjacent nodes at cable_sample_step resolution
+      for(unsigned int i=0; i+1 < m_cable_node_x.size(); i++) {
+        double x1 = m_cable_node_x[i],   y1 = m_cable_node_y[i];
+        double x2 = m_cable_node_x[i+1], y2 = m_cable_node_y[i+1];
+        double seg_len = hypot(x2 - x1, y2 - y1);
+        unsigned int samples = 1;
+        if(m_cable_sample_step > 0.1)
+          samples = (unsigned int)ceil(seg_len / m_cable_sample_step);
+        for(unsigned int s=1; s<samples; s++) {
+          double t  = (double)s / (double)samples;
+          double xs = x1 + t*(x2-x1);
+          double ys = y1 + t*(y2-y1);
+          double di = poly.dist_to_poly(xs, ys);
+          if(di < d_cable)
+            d_cable = di;
+        }
+      }
+    }
+    else {
+      // Fallback: straight line from nav to tow (original behavior)
+      double x1 = m_nav_x,   y1 = m_nav_y;
+      double x2 = m_towed_x, y2 = m_towed_y;
+      double seg_len = hypot(x2 - x1, y2 - y1);
+      unsigned int samples = 1;
+      if(m_cable_sample_step > 0.1)
+        samples = (unsigned int)ceil(seg_len / m_cable_sample_step);
+      if(samples < 1) samples = 1;
+      for(unsigned int i=0; i<=samples; i++) {
+        double t  = (double)i / (double)samples;
+        double xs = x1 + t*(x2-x1);
+        double ys = y1 + t*(y2-y1);
+        double di = poly.dist_to_poly(xs, ys);
+        if(di < d_cable)
+          d_cable = di;
+      }
     }
   } else {
     d_cable = d_tow;
