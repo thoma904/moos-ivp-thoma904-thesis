@@ -129,6 +129,7 @@ Behavior=BHV_TowObstacleAvoid
      pwt_outer_dist = 15
      pwt_inner_dist = 5
      completed_dist = 30
+     sim_horizon = 2
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
