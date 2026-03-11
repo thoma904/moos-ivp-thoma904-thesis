@@ -100,8 +100,8 @@ bool AOF_TowObstacleAvoid::initialize()
     return(postMsgAOF("min_util_cpa is not set"));
   if(!m_obship_model.paramIsSet("max_util_cpa"))
     return(postMsgAOF("max_util_cpa is not set"));
-  if(!m_obship_model.paramIsSet("allowable_ttc"))
-    return(postMsgAOF("allowable_ttc is not set"));
+  if((m_sim_horizon <= 0) && !m_obship_model.paramIsSet("allowable_ttc"))
+    return(postMsgAOF("allowable_ttc or sim_horizon must be set"));
 
   if(!m_obship_model.getGutPoly().is_convex())
     return(postMsgAOF("m_obstacle is not convex"));
