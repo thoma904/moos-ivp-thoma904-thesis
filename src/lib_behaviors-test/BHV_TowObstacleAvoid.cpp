@@ -99,6 +99,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_rng_src = "nav";
 
   m_rng_tow_actual = -1;
+  m_tow_engaged = false;
 
   //attempt to fix pred jumping
   m_tow_vx_filt = 0;
@@ -117,9 +118,12 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_cd             = 0.7;
   m_c_tan          = 2.0;
 
-  m_sim_dt         = 0.1;
+  m_sim_dt         = 0.2;
   m_sim_horizon    = -1;
   m_turn_rate_max  = 15.0;
+
+  m_cable_sample_step = 1.0;
+  m_cable_check_interval = 5;
 
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
@@ -235,6 +239,16 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if((param == "tow_pad") && non_neg_number) {
     m_tow_pad = dval;
+    return(true);
+  }
+
+  else if((param == "cable_sample_step") && isNumber(val) && dval > 0) {
+    m_cable_sample_step = dval;
+    return(true);
+  }
+
+  else if((param == "cable_check_interval") && isNumber(val) && (int)dval > 0) {
+    m_cable_check_interval = (int)dval;
     return(true);
   }
 
@@ -601,7 +615,30 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     if(tow_rng_actual < 0) tow_rng_actual = 0;
     tow_rng_actual = std::max(0.0, tow_rng_actual - m_tow_pad);
 
-    m_rng_tow_actual = tow_rng_actual;
+    // Cable truth range: sample along anchor-to-tow for completion check
+    double cable_rng_actual = tow_rng_actual;
+    if(m_cable_sample_step > 0.1) {
+      double hdg_rad = (90.0 - m_osh) * M_PI / 180.0;
+      double ax = m_osx - m_attach_offset * cos(hdg_rad);
+      double ay = m_osy - m_attach_offset * sin(hdg_rad);
+      double cx = m_towed_x - ax;
+      double cy = m_towed_y - ay;
+      double clen = std::hypot(cx, cy);
+      if(clen > m_cable_sample_step) {
+        int samples = (int)ceil(clen / m_cable_sample_step);
+        for(int s = 1; s < samples; s++) {
+          double frac = (double)s / (double)samples;
+          double sx = ax + frac * cx;
+          double sy = ay + frac * cy;
+          double ds = gut_poly.dist_to_poly(sx, sy);
+          if(ds < 0) ds = 0;
+          ds = std::max(0.0, ds - m_tow_pad);
+          if(ds < cable_rng_actual)
+            cable_rng_actual = ds;
+        }
+      }
+    }
+    m_rng_tow_actual = std::min(tow_rng_actual, cable_rng_actual);
 
     m_rng_tow = gut_poly.dist_to_poly(m_tow_x_eval, m_tow_y_eval);
     if(m_rng_tow < 0) m_rng_tow = 0;
@@ -610,7 +647,31 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     // Truth range (m_rng_tow_actual): actual tow pose to polygon (used for completion)
     // Eval range  (m_rng_tow): lead/eval tow pose to polygon (used for relevance/system range)
 
-    m_rng_sys = m_rng_tow;
+    // Cable range: sample along anchor-to-tow line for closest approach
+    double rng_cable = m_rng_tow;
+    if(m_cable_sample_step > 0.1) {
+      double hdg_rad = (90.0 - m_osh) * M_PI / 180.0;
+      double ax = m_osx - m_attach_offset * cos(hdg_rad);
+      double ay = m_osy - m_attach_offset * sin(hdg_rad);
+      double cx = m_towed_x - ax;
+      double cy = m_towed_y - ay;
+      double clen = std::hypot(cx, cy);
+      if(clen > m_cable_sample_step) {
+        int samples = (int)ceil(clen / m_cable_sample_step);
+        for(int s = 1; s < samples; s++) {
+          double frac = (double)s / (double)samples;
+          double sx = ax + frac * cx;
+          double sy = ay + frac * cy;
+          double ds = gut_poly.dist_to_poly(sx, sy);
+          if(ds < 0) ds = 0;
+          ds = std::max(0.0, ds - m_tow_pad);
+          if(ds < rng_cable)
+            rng_cable = ds;
+        }
+      }
+    }
+
+    m_rng_sys = std::min(m_rng_tow, rng_cable);
     m_rng_src = "tow";
     os_range_to_poly = m_rng_sys;
   }
@@ -708,8 +769,17 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   if(m_tow_pose_valid && (m_rng_tow_actual >= 0))
     complete_rng = m_rng_tow_actual;
 
-  bool dist_clear    = (complete_rng > m_obship_model.getCompletedDist());
-  bool bearing_clear = (m_tow_pose_valid && (m_abaft_beam_thresh >= 0) &&
+  // Track whether the tow has ever been close enough to "engage" the
+  // obstacle. Without this gate the behavior dies immediately on spawn
+  // when the nav vehicle triggers the alert but the trailing tow body
+  // is still far from the obstacle.
+  double completed_dist = m_obship_model.getCompletedDist();
+  if(!m_tow_engaged && complete_rng >= 0 && complete_rng <= completed_dist)
+    m_tow_engaged = true;
+
+  bool dist_clear    = (m_tow_engaged && complete_rng > completed_dist);
+  bool bearing_clear = (m_tow_engaged && m_tow_pose_valid &&
+                        (m_abaft_beam_thresh >= 0) &&
                         towObstacleAbaftBeam(m_abaft_beam_thresh));
 
   if(dist_clear || bearing_clear)
@@ -833,15 +903,9 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     aof_avoid.setTowEval(true);
     aof_avoid.setTowOnly(true);  
 
-    bool okvx=true, okvy=true;
-    double towed_vx = getBufferDoubleVal("TOWED_VX", okvx);
-    double towed_vy = getBufferDoubleVal("TOWED_VY", okvy);
-
-    // Fallback: if tow velocity is unavailable, assume zero velocity.
-    if(!okvx || !okvy) {
-      towed_vx = 0;
-      towed_vy = 0;
-    }
+    // Use cached tow velocity from onEveryState (already validated there)
+    double towed_vx = m_towed_vel_valid ? m_towed_vx : 0;
+    double towed_vy = m_towed_vel_valid ? m_towed_vy : 0;
 
     // Use ACTUAL tow state as initial condition (not the lead point)
     aof_avoid.setTowState(m_towed_x, m_towed_y, towed_vx, towed_vy);
@@ -851,13 +915,15 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
                             m_k_spring, m_cd, m_c_tan);
 
     // Optional: match simulation dt to pTowing AppTick (e.g., 0.1 for 10 Hz)
-    aof_avoid.setSimParams(0.1, -1 /*use allowable_ttc*/);
+    aof_avoid.setSimParams(m_sim_dt, -1 /*use allowable_ttc*/, m_turn_rate_max);
+    aof_avoid.setCableSampleStep(m_cable_sample_step);
+    aof_avoid.setCableCheckInterval(m_cable_check_interval);
 
-    aof_avoid.setTowSpeedPenalty(true);
-    aof_avoid.setTowSpeedMin(0.5);        // start penalizing below 0.5 m/s tow speed
-    aof_avoid.setTowSpeedHardMin(0.1);    // optional: forbid <0.1 m/s tow speed
-    aof_avoid.setTowSpeedPenaltyPower(2); // quadratic
-    aof_avoid.setTowSpeedPenaltyFloor(0); // can set e.g. 0.05 to avoid "all flats" if needed
+    aof_avoid.setTowSpeedPenalty(false);
+    // aof_avoid.setTowSpeedMin(0.5);
+    // aof_avoid.setTowSpeedHardMin(0.1);
+    // aof_avoid.setTowSpeedPenaltyPower(2);
+    // aof_avoid.setTowSpeedPenaltyFloor(0);
   } 
   
   else {

@@ -123,6 +123,7 @@ protected: // State variables
   std::string m_rng_src;
 
   double m_rng_tow_actual;
+  bool   m_tow_engaged;  // true once tow range drops below completed_dist
 
   //Attempt to fix pred jumping
   double m_tow_vx_filt;
@@ -144,6 +145,9 @@ protected: // State variables
   double m_sim_dt;
   double m_sim_horizon;
   double m_turn_rate_max;
+
+  double m_cable_sample_step;
+  int    m_cable_check_interval;
 
 protected:
   HintHolder m_hints;
