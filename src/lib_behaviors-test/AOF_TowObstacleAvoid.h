@@ -67,6 +67,8 @@ public:
   void setTowDynParams(double cable_len, double attach_offset,
                        double k_spring, double cd, double c_tan);
   void setSimParams(double dt, double horizon, double turn_rate_max_deg = 0.0);
+  void setCableSampleStep(double v) { if(v > 0) m_cable_sample_step = v; }
+  void setCableCheckInterval(int v) { if(v > 0) m_cable_check_interval = v; }
 
  private:
   void propagateTowOneStep(double ax, double ay, double dt,
@@ -91,6 +93,10 @@ public:
   double m_sim_dt;
   double m_sim_horizon;
   double m_turn_rate_max;
+
+  // Cable avoidance params
+  double m_cable_sample_step;
+  int    m_cable_check_interval;
 
   // Tow speed penalty params
   bool   m_penalize_low_tow_spd;

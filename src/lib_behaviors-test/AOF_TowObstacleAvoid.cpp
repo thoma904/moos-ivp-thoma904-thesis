@@ -53,6 +53,10 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
   m_sim_horizon    = -1;
   m_turn_rate_max  = 0.0;
 
+  // Cable avoidance
+  m_cable_sample_step = 1.0;
+  m_cable_check_interval = 5;
+
   // Tow speed penalty (disabled by default)
   m_penalize_low_tow_spd = false;
   m_tow_spd_min          = 0.0;
@@ -166,6 +170,29 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   if(min_dist <= 0)
     return(getKnownMin());
 
+  // Check initial cable (anchor to tow) for obstacle proximity
+  double hdg_rad0 = (90.0 - osh) * M_PI / 180.0;
+  double ax0 = osx - m_attach_offset * cos(hdg_rad0);
+  double ay0 = osy - m_attach_offset * sin(hdg_rad0);
+  if(m_cable_sample_step > 0.1) {
+    double cx0 = tx - ax0;
+    double cy0 = ty - ay0;
+    double clen0 = std::hypot(cx0, cy0);
+    if(clen0 > m_cable_sample_step) {
+      int samples0 = (int)ceil(clen0 / m_cable_sample_step);
+      for(int s = 1; s < samples0; s++) {
+        double frac = (double)s / (double)samples0;
+        double sx = ax0 + frac * cx0;
+        double sy = ay0 + frac * cy0;
+        double ds = gut.dist_to_poly(sx, sy);
+        if(ds < 0) ds = 0;
+        min_dist = std::min(min_dist, ds);
+        if(min_dist <= 0)
+          return(getKnownMin());
+      }
+    }
+  }
+
   // Forward simulation of vessel + tow dynamics
   double vh = osh;       // vessel heading (turn-rate-limited)
   double vs = eval_spd;  // vessel speed (constant over horizon)
@@ -205,6 +232,27 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     double d = gut.dist_to_poly(tx, ty);
     if(d < 0) d = 0;
     min_dist = std::min(min_dist, d);
+
+    // Sample along cable (anchor to tow) every N sim steps
+    if(min_dist > 0 && m_cable_sample_step > 0.1 &&
+       (k % m_cable_check_interval == 0)) {
+      double cx = tx - ax;
+      double cy = ty - ay;
+      double cable_len = std::hypot(cx, cy);
+      if(cable_len > m_cable_sample_step) {
+        int samples = (int)ceil(cable_len / m_cable_sample_step);
+        for(int s = 1; s < samples; s++) {
+          double frac = (double)s / (double)samples;
+          double sx = ax + frac * cx;
+          double sy = ay + frac * cy;
+          double ds = gut.dist_to_poly(sx, sy);
+          if(ds < 0) ds = 0;
+          min_dist = std::min(min_dist, ds);
+          if(min_dist <= 0)
+            break;
+        }
+      }
+    }
 
     if(min_dist <= 0)
       break;
