@@ -126,12 +126,13 @@ Behavior=BHV_TowObstacleAvoid
   updates    = TOW_OBSTACLE_ALERT
 
        use_refinery = true
-      allowable_ttc = 25
+      allowable_ttc = 5
 	min_util_cpa_dist = 2.5
 	max_util_cpa_dist = 5
-     pwt_outer_dist = 60
+     pwt_outer_dist = 15
      pwt_inner_dist = 5
-     completed_dist = 65
+     completed_dist = 30
+     sim_horizon = 2
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
