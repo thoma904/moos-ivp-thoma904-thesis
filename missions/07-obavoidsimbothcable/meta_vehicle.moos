@@ -27,7 +27,6 @@ Processconfig = ANTLER
   Run = pObstacleMgr   @ NewConsole = false
   Run = pTowObstacleMgr @ NewConsole = false
   Run = pTowing        @ NewConsole = false
-  //Run = pTowing_Circle @ NewConsole = false
   Run = uTimerScript    @ NewConsole = false
   Run = pCable         @ NewConsole = false
 }
@@ -193,7 +192,7 @@ ProcessConfig = pTowObstacleMgr
 
   max_age_per_point = 90
 
-  alert_range = 60
+  alert_range = 30
 
   //Tow Specific Additions
   use_tow = true
