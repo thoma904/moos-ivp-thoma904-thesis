@@ -16,7 +16,7 @@ CONFIGS=(
     "25,15,30,20"
     "20,10,25,15"
     "50,40,35,25"
-    "50,5,50,5"
+    "40,15,40,5"
 )
 
 # Create output directory for results
