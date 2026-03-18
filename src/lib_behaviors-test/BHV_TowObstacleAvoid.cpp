@@ -367,9 +367,10 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   
   // =================================================================
   // Part 2B: Read tow state and compute tow-based ranges
-  //   m_rng_tow:        node0 (vessel attachment) to obstacle (relevance)
-  //   m_rng_tow_actual: actual tow pose / cable to obstacle (completion)
-  //   m_rng_sys:        min of cable samples, drives relevance and TTC
+  //   m_rng_tow:        cable min dist to obstacle (relevance)
+  //   m_rng_tow_actual: min of tow pose and cable samples (CPA tracking)
+  //   m_rng_sys:        cable min dist, drives relevance and TTC
+  //   tow_only_rng:     tow pose to obstacle only (drives completion)
   // =================================================================
   double os_range_to_poly = m_obship_model.getRange();
 
@@ -379,6 +380,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   m_rng_sys = os_range_to_poly;
   m_rng_src = "nav";
   m_rng_tow_actual = -1;
+  double tow_only_rng = -1;
 
   m_tow_pose_valid   = false;
   m_towed_vel_valid  = false;
@@ -584,34 +586,13 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       }
     }
     m_rng_tow_actual = std::min(tow_rng_actual, cable_rng_actual);
+    tow_only_rng = tow_rng_actual;
 
-    // Node0 (vessel attachment) to obstacle range (drives activation)
-    m_rng_tow = gut_poly.dist_to_poly(node0_x, node0_y);
-    if(m_rng_tow < 0) m_rng_tow = 0;
-    m_rng_tow = std::max(0.0, m_rng_tow - m_tow_pad);
-
-    // Sample along anchor-to-tow cable for closest approach (relevance)
-    double rng_cable = m_rng_tow;
-    if(m_cable_sample_step > 0.1) {
-      double cx = m_towed_x - node0_x;
-      double cy = m_towed_y - node0_y;
-      double clen = std::hypot(cx, cy);
-      if(clen > m_cable_sample_step) {
-        int samples = (int)ceil(clen / m_cable_sample_step);
-        for(int s = 1; s < samples; s++) {
-          double frac = (double)s / (double)samples;
-          double sx = node0_x + frac * cx;
-          double sy = node0_y + frac * cy;
-          double ds = gut_poly.dist_to_poly(sx, sy);
-          if(ds < 0) ds = 0;
-          ds = std::max(0.0, ds - m_tow_pad);
-          if(ds < rng_cable)
-            rng_cable = ds;
-        }
-      }
-    }
-
-    m_rng_sys = std::min(m_rng_tow, rng_cable);
+    // Minimum distance from relaxed cable shape to obstacle (drives activation)
+    double rng_cable = cableMinDistToPoly(node0_x, node0_y,
+                                          m_towed_x, m_towed_y, gut_poly);
+    m_rng_tow = rng_cable;
+    m_rng_sys = rng_cable;
     m_rng_src = "tow";
     os_range_to_poly = m_rng_sys;
   }
@@ -693,18 +674,20 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   // =================================================================
   double complete_rng = -1;
 
-  if(m_tow_pose_valid && (m_rng_tow_actual >= 0))
-    complete_rng = m_rng_tow_actual;
+  if(m_tow_pose_valid && (tow_only_rng >= 0))
+    complete_rng = tow_only_rng;
 
-  // Require tow to have been within completed_dist before allowing
-  // completion, so the behavior doesn't exit on spawn before the
-  // tow reaches the obstacle.
+  // Require the actual tow pose (not cable/node0) to have been within
+  // completed_dist before allowing completion, so the vessel attachment
+  // point passing the obstacle doesn't prematurely engage.
   double completed_dist = m_obship_model.getCompletedDist();
-  if(!m_tow_engaged && complete_rng >= 0 && complete_rng <= completed_dist)
+  if(!m_tow_engaged && m_tow_pose_valid && tow_only_rng >= 0
+     && tow_only_rng <= completed_dist)
     m_tow_engaged = true;
 
   bool dist_clear    = (m_tow_engaged && complete_rng > completed_dist);
   bool bearing_clear = (m_tow_engaged && m_tow_pose_valid &&
+                        complete_rng > 0 &&
                         (m_abaft_beam_thresh >= 0) &&
                         towObstacleAbaftBeam(m_abaft_beam_thresh));
 
@@ -1263,6 +1246,79 @@ bool BHV_TowObstacleAvoid::towObstacleAbaftBeam(double deg_abaft) const
   double abs_bearing = relAng(m_towed_x, m_towed_y, obs_x, obs_y);
   double rel_bearing = angle180(abs_bearing - tow_hdg);
   return(fabs(rel_bearing) > (90.0 + deg_abaft));
+}
+
+//------------------------------------------------------------
+// Procedure: cableMinDistToPoly()
+//   Purpose: Compute minimum distance from any cable node to
+//            the obstacle polygon using a relaxed cable shape.
+//            Initializes nodes as a straight line from anchor
+//            to tow, then runs spring-damper relaxation passes
+//            (mirroring Cable.cpp / AOF dynamics) to approximate
+//            the true cable curve.
+
+double BHV_TowObstacleAvoid::cableMinDistToPoly(
+    double ax, double ay,
+    double tx, double ty,
+    const XYPolygon &poly) const
+{
+  // Number of cable nodes (same formula as AOF / pCable)
+  int num_nodes;
+  if(m_cable_length < 30.0)
+    num_nodes = 3;
+  else
+    num_nodes = std::max(3, (int)(m_cable_length / 10.0));
+  double rest_length = m_cable_length / (double)(num_nodes - 1);
+
+  // Initialize nodes as straight line from anchor to tow
+  vector<double> nx(num_nodes), ny(num_nodes);
+  for(int i = 0; i < num_nodes; i++) {
+    double frac = (double)i / (double)(num_nodes - 1);
+    nx[i] = ax + frac * (tx - ax);
+    ny[i] = ay + frac * (ty - ay);
+  }
+
+  // Relaxation: run constraint passes to approximate cable drape.
+  // No velocity integration needed — just enforce distance constraints
+  // iteratively from the straight-line initialization.
+  int relax_iters = 4;
+  for(int r = 0; r < relax_iters; r++) {
+    // Forward pass: pull interior nodes toward previous neighbor
+    for(int i = 1; i < num_nodes - 1; i++) {
+      double dx = nx[i-1] - nx[i];
+      double dy = ny[i-1] - ny[i];
+      double dist = hypot(dx, dy);
+      if(dist > rest_length && dist > 1e-9) {
+        double sc = rest_length / dist;
+        nx[i] = nx[i-1] - dx * sc;
+        ny[i] = ny[i-1] - dy * sc;
+      }
+    }
+    // Backward pass: pull interior nodes toward next neighbor
+    for(int i = num_nodes - 2; i >= 1; i--) {
+      double dx = nx[i+1] - nx[i];
+      double dy = ny[i+1] - ny[i];
+      double dist = hypot(dx, dy);
+      if(dist > rest_length && dist > 1e-9) {
+        double sc = rest_length / dist;
+        nx[i] = nx[i+1] - dx * sc;
+        ny[i] = ny[i+1] - dy * sc;
+      }
+    }
+  }
+
+  // Find minimum distance from any cable node to the polygon
+  double min_dist = 1e9;
+  for(int i = 0; i < num_nodes; i++) {
+    double d = poly.dist_to_poly(nx[i], ny[i]);
+    if(d < 0) d = 0;
+    d = std::max(0.0, d - m_tow_pad);
+    if(d < min_dist)
+      min_dist = d;
+    if(min_dist <= 0)
+      return 0;
+  }
+  return min_dist;
 }
 
 //------------------------------------------------------------
