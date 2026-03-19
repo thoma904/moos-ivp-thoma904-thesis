@@ -125,11 +125,11 @@ Behavior=BHV_TowObstacleAvoid
        use_refinery = true
       allowable_ttc = 20
 	min_util_cpa_dist = 2.5
-	max_util_cpa_dist = 5
+	max_util_cpa_dist = 10
      pwt_outer_dist = 20
      pwt_inner_dist = 10
-     completed_dist = 60
-     sim_horizon = 10
+     completed_dist = 25
+     sim_horizon = 25
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
@@ -139,7 +139,7 @@ Behavior=BHV_TowObstacleAvoid
 	visual_hints = gut_poly_edge_color = yellow
 
   tow_pad = 1.0
-  abaft_beam_thresh = off
+  abaft_beam_thresh = 45
 }
 
 Behavior=BHV_AvoidObstacleV24
@@ -151,9 +151,9 @@ Behavior=BHV_AvoidObstacleV24
   updates    = OBSTACLE_ALERT
 
        use_refinery = true
-      allowable_ttc = 5 
+      allowable_ttc = 20
 	min_util_cpa_dist = 2.5
-	max_util_cpa_dist = 5
+	max_util_cpa_dist = 10
      pwt_outer_dist = 30        
      pwt_inner_dist = 20
      completed_dist = 60
