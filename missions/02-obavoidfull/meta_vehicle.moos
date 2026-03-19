@@ -220,6 +220,7 @@ ProcessConfig = pTowObstacleMgr
   CommsTick = 4
 
   point_var = TRACKED_FEATURE
+  given_obs_var = TOW_GIVEN_OBSTACLE
 
 	app_logging = true
 
@@ -227,7 +228,7 @@ ProcessConfig = pTowObstacleMgr
 	obstacles_color = green
 
 	post_view_polys = true
-	
+
 	given_max_duration = 1000
 
 	general_alert = update_var=GEN_ALERT, alert_range=400000
