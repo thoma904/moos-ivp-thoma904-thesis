@@ -58,9 +58,9 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
   m_cable_check_interval = 5;
 
   // Tow speed penalty (disabled by default)
-  m_penalize_low_tow_spd = false;
-  m_tow_spd_min          = 0.0;
-  m_tow_spd_hard_min     = 0.0;
+  m_penalize_low_tow_spd = true;
+  m_tow_spd_min          = 1.0;
+  m_tow_spd_hard_min     = 0.5;
   m_tow_spd_power        = 2.0;
   m_tow_spd_floor        = 0.0;
 }

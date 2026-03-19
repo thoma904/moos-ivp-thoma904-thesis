@@ -808,7 +808,7 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
     aof_avoid.setCableSampleStep(m_cable_sample_step);
     aof_avoid.setCableCheckInterval(m_cable_check_interval);
-    aof_avoid.setTowSpeedPenalty(false);
+    aof_avoid.setTowSpeedPenalty(true);
   }
   else {
     aof_avoid.setTowEval(false);
