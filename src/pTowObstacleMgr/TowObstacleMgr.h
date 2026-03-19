@@ -75,6 +75,7 @@ protected:
   
 private: // Configuration variables
   std::string  m_point_var;            // incoming points
+  std::string  m_given_obs_var;       // e.g. GIVEN_OBSTACLE or TOW_GIVEN_OBSTACLE
 
   std::string  m_alert_var;
   std::string  m_alert_name;

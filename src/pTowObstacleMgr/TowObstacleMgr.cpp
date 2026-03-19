@@ -73,6 +73,7 @@ TowObstacleMgr::TowObstacleMgr()
   m_alerts_posted = 0;
   m_alerts_resolved = 0;
 
+  m_given_obs_var = "GIVEN_OBSTACLE";  // default; configurable
   m_alert_var = "";    // Initially no alerts will be posted
 
   //Tow Specific Additions
@@ -224,9 +225,11 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       handled = true;
     }
 
-    else if(key == "GIVEN_OBSTACLE") 
+    else if(key == m_given_obs_var)
       handled = handleGivenObstacle(sval);
-    else if(key == "OBM_ALERT_REQUEST") 
+    else if(key == "GIVEN_OBSTACLE" || key == "TOW_GIVEN_OBSTACLE")
+      handled = true; // silently ignore the other obstacle var
+    else if(key == "OBM_ALERT_REQUEST")
       handled = handleMailAlertRequest(sval);
     else if((m_disable_var != "") && (key == m_disable_var))
       handled = handleMailModEnableObstacle(sval, "disable");
@@ -397,6 +400,8 @@ bool TowObstacleMgr::OnStartUp()
       }
     }
 
+    else if(param == "given_obs_var")
+      handled = setNonWhiteVarOnString(m_given_obs_var, value);
     else if(param == "alert_var")
       handled = setNonWhiteVarOnString(m_alert_var, value);
 
@@ -429,7 +434,7 @@ void TowObstacleMgr::registerVariables()
   Register("NAV_X", 0);
   Register("NAV_Y", 0);
 
-  Register("GIVEN_OBSTACLE",0);
+  Register(m_given_obs_var, 0);
   Register("OBM_ALERT_REQUEST",0);
 
   //Tow Specific Additions
