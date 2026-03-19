@@ -60,9 +60,9 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
   // Tow speed penalty (disabled by default)
   m_penalize_low_tow_spd = true;
   m_tow_spd_min          = 1.0;
-  m_tow_spd_hard_min     = 0.5;
+  m_tow_spd_hard_min     = 0.0;
   m_tow_spd_power        = 2.0;
-  m_tow_spd_floor        = 0.0;
+  m_tow_spd_floor        = 0.25;
 }
 
 //----------------------------------------------------------------
@@ -137,11 +137,13 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   if(!m_tow_pose_set || !m_dyn_params_set)
     return(getKnownMax());
 
-  // Simulation horizon: use configured value or fall back to allowable_ttc
-  double T = (m_sim_horizon > 0) ? m_sim_horizon : m_obship_model.getAllowableTTC();
+  // Simulation horizon: use configured value or fall back to allowable_ttc.
+  // A value of -2 signals "static cable check only, no forward sim."
+  bool static_only = (m_sim_horizon < -1.5);
+  double T = static_only ? 0 : ((m_sim_horizon > 0) ? m_sim_horizon : m_obship_model.getAllowableTTC());
   double dt = m_sim_dt;
   int steps = (dt > 1e-6) ? (int)ceil(T / dt) : 0;
-  if(steps <= 0)
+  if(steps <= 0 && !static_only)
     return(getKnownMax());
 
   // Initial ownship pose (drives the tow anchor point)
@@ -185,13 +187,19 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   // Track minimum tow-to-obstacle distance over the horizon
   double min_dist = 1e9;
 
+  // Track time-to-first-contact: when min_dist hits 0, record which
+  // simulation step it happened on.  -1 means no contact predicted.
+  int contact_step = -1;
+
   // Check all initial cable nodes for obstacle proximity (replaces straight-line sampling)
   for(int i = 0; i < num_nodes; i++) {
     double ds = gut.dist_to_poly(n_x[i], n_y[i]);
     if(ds < 0) ds = 0;
     min_dist = std::min(min_dist, ds);
-    if(min_dist <= 0)
-      return(getKnownMin());
+    if(min_dist <= 0) {
+      contact_step = 0;
+      break;
+    }
   }
 
   // Forward simulation of vessel + tow dynamics
@@ -199,6 +207,10 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   double vs = eval_spd;  // vessel speed (constant over horizon)
 
   for(int k = 0; k < steps; k++) {
+
+    // If contact already occurred, stop simulating
+    if(contact_step >= 0)
+      break;
 
     // Heading update (with optional turn-rate limit)
     if(m_turn_rate_max > 0) {
@@ -252,22 +264,52 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     }
 
     if(min_dist <= 0)
-      break;
+      contact_step = k + 1;
   }
 
   // Map minimum distance to utility using min/max CPA thresholds
+  // Above max_util_cpa: full utility (safe)
+  // Between min and max: linear ramp from sub_ceiling to max
+  // Below min_util_cpa: small but nonzero gradient so the behavior
+  //   stays active and prefers larger CPA even when all options are bad
+  // Contact predicted (min_dist=0): use time-to-contact so the behavior
+  //   prefers headings that delay contact even when it can't be avoided
   double minu = m_obship_model.getMinUtilCPA();
   double maxu = m_obship_model.getMaxUtilCPA();
 
-  double u_obs = getKnownMin();
+  double umin = getKnownMin();
+  double umax = getKnownMax();
 
-  if(min_dist <= minu)
-    u_obs = getKnownMin();
+  // Utility is divided into four continuous bands:
+  //   contact predicted:  [umin .. ttc_ceiling]   based on time-to-contact
+  //   CPA below min_util: [ttc_ceiling .. dist_ceiling] based on min_dist
+  //   CPA in ramp zone:   [dist_ceiling .. umax]  based on min_dist
+  //   CPA above max_util: umax
+  // ttc_ceiling < dist_ceiling so "no contact" always beats "late contact"
+  // Values must be large enough for the IvP reflector to resolve differences
+  double ttc_ceiling  = umin + 0.40 * (umax - umin);  // 40% of range
+  double dist_ceiling = umin + 0.50 * (umax - umin);  // 50% of range
+
+  double u_obs = umin;
+
+  if(contact_step >= 0) {
+    // Contact was predicted. Use time-to-contact as utility:
+    // later contact = higher utility, up to ttc_ceiling.
+    // contact_step=0 (immediate) -> umin
+    // contact_step=steps (end of horizon) -> ttc_ceiling
+    double ttc_frac = (steps > 0) ? (double)contact_step / (double)steps : 0;
+    u_obs = umin + ttc_frac * (ttc_ceiling - umin);
+  }
   else if(min_dist >= maxu)
-    u_obs = getKnownMax();
-  else {
+    u_obs = umax;
+  else if(min_dist >= minu) {
     double pct = (min_dist - minu) / (maxu - minu);
-    u_obs = (getKnownMin() + pct * (getKnownMax() - getKnownMin()));
+    u_obs = dist_ceiling + pct * (umax - dist_ceiling);
+  }
+  else {
+    // No contact but CPA < min_util. Ramp from ttc_ceiling to dist_ceiling.
+    double pct = min_dist / minu;
+    u_obs = ttc_ceiling + pct * (dist_ceiling - ttc_ceiling);
   }
 
   // Apply tow-speed penalty based on predicted tow speed

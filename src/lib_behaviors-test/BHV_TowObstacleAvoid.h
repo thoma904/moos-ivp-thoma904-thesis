@@ -152,6 +152,8 @@ protected: // State variables
   double m_cable_sample_step;
   int    m_cable_check_interval;
 
+  bool   m_tow_deployed;
+
 protected:
   HintHolder m_hints;
   

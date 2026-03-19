@@ -93,6 +93,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_rng_src = "nav";
   m_rng_tow_actual = -1;
   m_tow_engaged = false;
+  m_tow_deployed = false;
 
   // Filtered tow velocity for lead-point prediction
   m_tow_vx_filt = 0;
@@ -124,6 +125,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   addInfoVars("TOWED_VX, TOWED_VY", "no_warning");
   addInfoVars("TOW_CABLE_LENGTH, TOW_ATTACH_OFFSET", "no_warning");
   addInfoVars("TOW_SPRING_STIFFNESS, TOW_DRAG_COEFF, TOW_TAN_DAMPING", "no_warning");
+  addInfoVars("TOW_DEPLOYED", "no_warning");
   addInfoVars(m_resolved_obstacle_var);
 }
 
@@ -418,6 +420,10 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
 
   tmp_val = getBufferDoubleVal("TOW_TAN_DAMPING", ok_tmp);
   if(ok_tmp) m_c_tan = tmp_val;
+
+  // Read tow deployment state from pTowing
+  string deploy_str = getBufferStringVal("TOW_DEPLOYED");
+  m_tow_deployed = (deploy_str == "true");
 
   double node0_x = 0;
   double node0_y = 0;
@@ -776,12 +782,6 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
   if(!ipf)
     return(0);
 
-  if(ipf->getValMaxUtil() == 0)
-  {
-    delete(ipf);
-    return(0);
-  }
-
   return(ipf);
 }
 
@@ -793,7 +793,11 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
   AOF_TowObstacleAvoid aof_avoid(m_domain);
   aof_avoid.setObShipModel(m_obship_model);
 
-  // Configure AOF with tow state when available
+  // Configure AOF with tow state when pose is valid.
+  // When the tow is deployed, use full forward simulation of tow dynamics.
+  // When not yet deployed, pass tow state but disable the forward sim
+  // so the AOF uses the static cable/tow position for avoidance without
+  // trying to predict dynamics of a stationary tow body.
   if(m_tow_pose_valid)
   {
     aof_avoid.setTowEval(true);
@@ -805,10 +809,18 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     aof_avoid.setTowState(m_towed_x, m_towed_y, towed_vx, towed_vy);
     aof_avoid.setTowDynParams(m_cable_length, m_attach_offset,
                               m_k_spring, m_cd, m_c_tan);
-    aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
     aof_avoid.setCableSampleStep(m_cable_sample_step);
     aof_avoid.setCableCheckInterval(m_cable_check_interval);
-    aof_avoid.setTowSpeedPenalty(true);
+
+    if(m_tow_deployed) {
+      aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
+      aof_avoid.setTowSpeedPenalty(true);
+    }
+    else {
+      // Signal static cable check only (no forward sim) with sentinel -2
+      aof_avoid.setSimParams(m_sim_dt, -2, m_turn_rate_max);
+      aof_avoid.setTowSpeedPenalty(false);
+    }
   }
   else {
     aof_avoid.setTowEval(false);
