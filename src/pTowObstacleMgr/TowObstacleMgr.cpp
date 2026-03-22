@@ -102,6 +102,8 @@ TowObstacleMgr::TowObstacleMgr()
   m_abaft_beam_thresh = -1;  // disabled by default
 
   m_cable_nodes_valid = false;
+
+  m_post_view_point = true;
 }
 
 //---------------------------------------------------------
@@ -276,7 +278,7 @@ bool TowObstacleMgr::Iterate()
   //Notify("TOWMGR_TOW_DEPLOYED", m_tow_deployed ? "true" : "false");
   Notify("TOWMGR_TOW_ONLY",     m_tow_only ? "true" : "false");
 
-  if(m_use_tow && m_tow_pose_valid) {
+  if(m_use_tow && m_tow_pose_valid && m_post_view_point) {
     XYPoint towpt(m_towed_x, m_towed_y);
     towpt.set_label("towmgr_tow");
     towpt.set_color("vertex", "yellow");
@@ -404,6 +406,9 @@ bool TowObstacleMgr::OnStartUp()
       handled = setNonWhiteVarOnString(m_given_obs_var, value);
     else if(param == "alert_var")
       handled = setNonWhiteVarOnString(m_alert_var, value);
+
+    else if(param == "post_view_point")
+      handled = setBooleanOnString(m_post_view_point, value);
 
     if(!handled)
       reportUnhandledConfigWarning(orig);
