@@ -1,8 +1,8 @@
 /****************************************************************/
-/*   NAME: Tom Monaghan                                             */
+/*   NAME: Tom Monaghan                                         */
 /*   ORGN: MIT, Cambridge MA                                    */
-/*   FILE: Cable_Info.cpp                               */
-/*   DATE: December 29th, 1963                                  */
+/*   FILE: Cable_Info.cpp                                       */
+/*   DATE: March 2026                                           */
 /****************************************************************/
 
 #include <cstdlib>
@@ -22,8 +22,8 @@ void showSynopsis()
   blk("------------------------------------                            ");
   blk("  pCable models the cable shape between the towing vessel and   ");
   blk("  the tow body as a chain of spring-damped nodes. Complements   ");
-  blk("  pTowing1 which computes the tow body endpoint. Dynamics match ");
-  blk("  the pTowing1/AOF spring-drag-clamp model applied per segment.");
+  blk("  pTowing which computes the tow body endpoint. Dynamics match  ");
+  blk("  the pTowing/AOF spring-drag-clamp model applied per segment.  ");
   blk("  Publishes VIEW_SEGLIST and CABLE_NODE_REPORT for obstacle     ");
   blk("  avoidance and visualization.                                  ");
 }
@@ -35,15 +35,15 @@ void showHelpAndExit()
 {
   blk("                                                                ");
   blu("=============================================================== ");
-  blu("Usage: pCable file.moos [OPTIONS]                   ");
+  blu("Usage: pCable file.moos [OPTIONS]                               ");
   blu("=============================================================== ");
   blk("                                                                ");
   showSynopsis();
   blk("                                                                ");
   blk("Options:                                                        ");
   mag("  --alias","=<ProcessName>                                      ");
-  blk("      Launch pCable with the given process name         ");
-  blk("      rather than pCable.                           ");
+  blk("      Launch pCable with the given process name                 ");
+  blk("      rather than pCable.                                       ");
   mag("  --example, -e                                                 ");
   blk("      Display example MOOS configuration block.                 ");
   mag("  --help, -h                                                    ");
@@ -51,7 +51,7 @@ void showHelpAndExit()
   mag("  --interface, -i                                               ");
   blk("      Display MOOS publications and subscriptions.              ");
   mag("  --version,-v                                                  ");
-  blk("      Display the release version of pCable.        ");
+  blk("      Display the release version of pCable.                    ");
   blk("                                                                ");
   blk("Note: If argv[2] does not otherwise match a known option,       ");
   blk("      then it will be interpreted as a run alias. This is       ");
@@ -67,7 +67,7 @@ void showExampleConfigAndExit()
 {
   blk("                                                                ");
   blu("=============================================================== ");
-  blu("pCable Example MOOS Configuration                   ");
+  blu("pCable Example MOOS Configuration                               ");
   blu("=============================================================== ");
   blk("                                                                ");
   blk("ProcessConfig = pCable                                          ");
@@ -93,28 +93,32 @@ void showInterfaceAndExit()
 {
   blk("                                                                ");
   blu("=============================================================== ");
-  blu("pCable INTERFACE                                    ");
+  blu("pCable INTERFACE                                                ");
   blu("=============================================================== ");
   blk("                                                                ");
   showSynopsis();
   blk("                                                                ");
   blk("SUBSCRIPTIONS:                                                  ");
   blk("------------------------------------                            ");
-  blk("  NAV_X            = double (vessel x position)                 ");
-  blk("  NAV_Y            = double (vessel y position)                 ");
-  blk("  NAV_HEADING      = double (vessel heading, degrees)           ");
-  blk("  TOWED_X          = double (tow body x, from pTowing1)        ");
-  blk("  TOWED_Y          = double (tow body y, from pTowing1)        ");
-  blk("  TOW_CABLE_LENGTH = double (dynamic cable length sync)         ");
-  blk("  TOW_ATTACH_OFFSET    = double (dynamic attach offset sync)    ");
-  blk("  TOW_SPRING_STIFFNESS = double (dynamic spring constant sync)  ");
-  blk("  TOW_DRAG_COEFF       = double (dynamic drag coeff sync)       ");
-  blk("  TOW_TAN_DAMPING      = double (dynamic tangential damp sync)  ");
+  blk("  NAV_X       = 103.0                                           ");
+  blk("  NAV_Y       = -23.8                                           ");
+  blk("  NAV_HEADING = 180.0                                           ");
+  blk("                                                                ");
+  blk("  TOWED_X     = 120.5          (tow body position from pTowing) ");
+  blk("  TOWED_Y     = -30.2                                           ");
+  blk("                                                                ");
+  blk("  TOW_CABLE_LENGTH     = 30    (runtime sync from pTowing)      ");
+  blk("  TOW_ATTACH_OFFSET    = 5                                      ");
+  blk("  TOW_SPRING_STIFFNESS = 5.0                                    ");
+  blk("  TOW_DRAG_COEFF       = 0.7                                    ");
+  blk("  TOW_TAN_DAMPING      = 2.0                                    ");
   blk("                                                                ");
   blk("PUBLICATIONS:                                                   ");
   blk("------------------------------------                            ");
-  blk("  VIEW_SEGLIST      = cable shape for pMarineViewer             ");
-  blk("  CABLE_NODE_REPORT = nodes=N,x0=..,y0=..,x1=..,y1=..,...      ");
+  blk("  VIEW_SEGLIST      = pts={103,-23.8:112,-27:120.5,-30.2},      ");
+  blk("                      label=CABLE,edge_color=white,edge_size=1  ");
+  blk("  CABLE_NODE_REPORT = nodes=3,x0=103,y0=-23.8,x1=112,y1=-27,    ");
+  blk("                      x2=120.5,y2=-30.2                         ");
   blk("                                                                ");
   exit(0);
 }
