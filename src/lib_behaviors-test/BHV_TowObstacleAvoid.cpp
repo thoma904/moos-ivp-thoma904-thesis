@@ -85,8 +85,6 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_holonomic_ok = false;
 
-  m_allstop_on_breach = true;
-
   // Tow-specific vars
   m_tow_pad           = 0.0;
   m_abaft_beam_thresh = -1;
@@ -94,15 +92,9 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_towed_x      = 0;
   m_towed_y      = 0;
 
-  m_use_tow_lead = true;
-  m_tow_lead_sec = 6.0;
-
   m_last_tow_x = 0;
   m_last_tow_y = 0;
   m_last_tow_time = -1;
-
-  m_tow_x_eval = 0;
-  m_tow_y_eval = 0;
 
   m_towed_vx = 0;
   m_towed_vy = 0;
@@ -118,15 +110,15 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_tow_engaged = false;
   m_tow_deployed = false;
 
-  // Filtered tow velocity for lead-point prediction
+  // Filtered tow velocity for heading estimation
   m_tow_vx_filt = 0;
   m_tow_vy_filt = 0;
   m_tow_vel_valid = false;
 
-  m_tow_pose_stale    = 1.0;
-  m_tow_lead_alpha    = 0.3;
-  m_tow_lead_max_speed = 3.0;
-  m_tow_xy_sync_eps   = 0.10;
+  m_tow_pose_stale     = 1.0;
+  m_tow_filt_alpha     = 0.3;
+  m_tow_filt_max_speed = 3.0;
+  m_tow_xy_sync_eps    = 0.10;
 
   // Tow dynamics defaults (updated each iteration from pTowing publications)
   m_cable_length   = 30;
@@ -237,9 +229,6 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
       return(false);
     return(setNonWhiteVarOnString(m_obstacle_id, val));
   }
-
-  else if(param == "allstop_on_breach") 
-    return(setBooleanOnString(m_allstop_on_breach, val));
 
   // Tow-specific params
   else if((param == "tow_pad") && non_neg_number) {
@@ -454,13 +443,10 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   double node0_x = 0;
   double node0_y = 0;
 
-  if(m_tow_pose_valid) 
+  if(m_tow_pose_valid)
   {
-    // Lead-point estimation: low-pass filtered velocity with spike rejection
-    m_tow_x_eval = m_towed_x;
-    m_tow_y_eval = m_towed_y;
-
-    double now = m_curr_time;
+    // Low-pass filtered tow velocity (used for heading in towObstacleAbaftBeam)
+    double now = 0;
     if(m_info_buffer)
       now = m_info_buffer->getCurrTime();
 
@@ -469,59 +455,45 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     double pose_time = now;
     double newest_t  = now;
 
-    if(m_info_buffer) 
+    if(m_info_buffer)
     {
       tx_t = m_info_buffer->tQuery("TOWED_X", ok_tx_t);
       ty_t = m_info_buffer->tQuery("TOWED_Y", ok_ty_t);
 
-      if(ok_tx_t && ok_ty_t) 
-      {
+      if(ok_tx_t && ok_ty_t) {
         newest_t  = std::max(tx_t, ty_t);
         pose_time = newest_t;
       }
-      else if(ok_tx_t) 
-      {
+      else if(ok_tx_t)
         newest_t = pose_time = tx_t;
-      }
-      else if(ok_ty_t) 
-      {
+      else if(ok_ty_t)
         newest_t = pose_time = ty_t;
-      }
     }
 
-    // Stale tow pose disables velocity projection
     bool pose_stale = ((now - newest_t) > m_tow_pose_stale);
     if(pose_stale)
     {
       m_tow_vel_valid = false;
     }
-    else if(m_use_tow_lead && (m_tow_lead_sec > 0))
+    else
     {
-      // Require X/Y timestamps to be paired to avoid mixing stale components
       bool pose_synced = true;
-      if(ok_tx_t && ok_ty_t) 
-      {
+      if(ok_tx_t && ok_ty_t)
         pose_synced = (fabs(tx_t - ty_t) <= m_tow_xy_sync_eps);
-      }
 
       bool new_sample = false;
-      if(m_last_tow_time < 0) 
-      {
+      if(m_last_tow_time < 0)
         new_sample = true;
-      }
       else if(ok_tx_t && ok_ty_t)
-      {
         new_sample = pose_synced && (tx_t > (m_last_tow_time + 1e-6)) && (ty_t > (m_last_tow_time + 1e-6));
-      }
       else
-      {
         new_sample = (pose_time > (m_last_tow_time + 0.05));
-      }
+
       if(new_sample && (m_last_tow_time > 0))
       {
         double dt = pose_time - m_last_tow_time;
 
-        if((dt > 0.05) && (dt < 2.0)) 
+        if((dt > 0.05) && (dt < 2.0))
         {
           double dx = (m_towed_x - m_last_tow_x);
           double dy = (m_towed_y - m_last_tow_y);
@@ -530,25 +502,21 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
           double inst_vy  = dy / dt;
           double inst_spd = hypot(inst_vx, inst_vy);
 
-          if(inst_spd <= m_tow_lead_max_speed)
+          if(inst_spd <= m_tow_filt_max_speed)
           {
-            // Low-pass filter velocity
-            if(!m_tow_vel_valid)
-            {
+            if(!m_tow_vel_valid) {
               m_tow_vx_filt   = inst_vx;
               m_tow_vy_filt   = inst_vy;
               m_tow_vel_valid = true;
             }
-            else 
-            {
-              m_tow_vx_filt = m_tow_lead_alpha * inst_vx + (1.0 - m_tow_lead_alpha) * m_tow_vx_filt;
-              m_tow_vy_filt = m_tow_lead_alpha * inst_vy + (1.0 - m_tow_lead_alpha) * m_tow_vy_filt;
+            else {
+              m_tow_vx_filt = m_tow_filt_alpha * inst_vx + (1.0 - m_tow_filt_alpha) * m_tow_vx_filt;
+              m_tow_vy_filt = m_tow_filt_alpha * inst_vy + (1.0 - m_tow_filt_alpha) * m_tow_vy_filt;
             }
 
             double filt_spd = hypot(m_tow_vx_filt, m_tow_vy_filt);
-            if(filt_spd > m_tow_lead_max_speed)
-            {
-              double s = m_tow_lead_max_speed / filt_spd;
+            if(filt_spd > m_tow_filt_max_speed) {
+              double s = m_tow_filt_max_speed / filt_spd;
               m_tow_vx_filt *= s;
               m_tow_vy_filt *= s;
             }
@@ -558,14 +526,10 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
             m_last_tow_time = pose_time;
           }
           else
-          {
             m_tow_vel_valid = false;
-          }
         }
         else
-        {
           m_tow_vel_valid = false;
-        }
       }
       else if(new_sample && (m_last_tow_time < 0))
       {
@@ -573,12 +537,6 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
         m_last_tow_y    = m_towed_y;
         m_last_tow_time = pose_time;
         m_tow_vel_valid = false;
-      }
-        
-      if(m_tow_vel_valid)
-      {
-        m_tow_x_eval = m_towed_x + m_tow_vx_filt * m_tow_lead_sec;
-        m_tow_y_eval = m_towed_y + m_tow_vy_filt * m_tow_lead_sec;
       }
     }
 

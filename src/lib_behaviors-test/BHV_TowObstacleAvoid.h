@@ -43,7 +43,6 @@ protected: // Local Utility functions
   void   postErasablePolygons();
   void   initVisualHints();
   
-  bool   applyBuffer();
   IvPFunction* buildOF();
 
   //Tow Specific Utilities
@@ -96,31 +95,21 @@ protected: // State variables
 
   std::string m_side_lock;
 
-  bool m_allstop_on_breach;
-
-  //Tow Specific State Variables
   // Tow state
   double m_towed_x;
   double m_towed_y;
-  bool   m_use_tow_lead;
-  double m_tow_lead_sec;
 
   double m_last_tow_x;
   double m_last_tow_y;
   double m_last_tow_time;
-
-  double m_tow_x_eval;
-  double m_tow_y_eval;
 
   double m_towed_vx;
   double m_towed_vy;
   bool   m_towed_vel_valid;
   bool   m_tow_pose_valid;
 
-  double m_curr_time;
-
   // Cached ranges: NAV range and tow range are tracked separately.
-  // System range is the tow eval/lead range when tow pose is valid.
+  // System range is the cable min distance when tow pose is valid.
   double      m_rng_sys;
   double      m_rng_nav;
   double      m_rng_tow;
@@ -129,14 +118,14 @@ protected: // State variables
   double m_rng_tow_actual;
   bool   m_tow_engaged;  // true once tow range drops below completed_dist
 
-  //Attempt to fix pred jumping
+  // Filtered tow velocity for heading estimation
   double m_tow_vx_filt;
   double m_tow_vy_filt;
   bool   m_tow_vel_valid;
 
   double m_tow_pose_stale;
-  double m_tow_lead_alpha;
-  double m_tow_lead_max_speed;
+  double m_tow_filt_alpha;
+  double m_tow_filt_max_speed;
   double m_tow_xy_sync_eps;
 
   //tow dynamics
