@@ -296,6 +296,7 @@ bool Cable::Iterate()
   }
   pts_str += "}";
   pts_str += ",label=CABLE";
+  pts_str += ",label_color=invisible";
   pts_str += ",edge_color=white,edge_size=1,vertex_size=0";
   Notify("VIEW_SEGLIST", pts_str);
 
