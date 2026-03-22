@@ -2,14 +2,36 @@
 /*    NAME: Tom Monaghan                                    */
 /*    ORGN: MIT                                             */
 /*    FILE: BHV_TowObstacleAvoid.cpp                        */
-/*    DATE:                                                 */
+/*    DATE: 22Mar2026                                       */
 /*                                                          */
-/* NOTE: This behavior is derived from MOOS-IvP             */
-/* BHV_AvoidObstacleV24. Modifications add tow-aware        */
-/* obstacle avoidance instead of the original vessel logic. */
-/* Tow “truth” range (m_rng_tow_actual) is used for         */
-/* completion, while an optional lead point                 */
-/* (m_tow_x_eval/m_tow_y_eval) is used for relevance/range. */
+/* NOTE: Derived from MOOS-IvP BHV_AvoidObstacleV24.       */
+/* Adds tow-aware obstacle avoidance that accounts for the  */
+/* vessel, cable, and towed body as a coupled system.       */
+/*                                                          */
+/* Range computation:                                       */
+/*   m_rng_sys  - min cable/tow distance to obstacle,       */
+/*                drives relevance, weight, and TTC gate.   */
+/*   m_rng_tow_actual - min of tow pose and cable samples,  */
+/*                      used for CPA tracking.              */
+/*   tow_only_rng - tow pose to obstacle only, drives       */
+/*                  completion (requires tow_engaged).      */
+/*                                                          */
+/* Objective function (AOF_TowObstacleAvoid):               */
+/*   When tow is deployed, forward-simulates vessel +       */
+/*   cable + tow dynamics over sim_horizon to score each    */
+/*   candidate heading/speed. When not deployed, evaluates  */
+/*   static cable/tow position without dynamics.            */
+/*                                                          */
+/* Refinery:                                                */
+/*   Uses vessel position while approaching; switches to    */
+/*   tow position once obstacle is aft of the vessel beam,  */
+/*   so basin/plateau regions always reflect the component  */
+/*   most at risk.                                          */
+/*                                                          */
+/* Completion:                                              */
+/*   Requires tow_engaged (tow entered completed_dist).     */
+/*   Completes when tow_only_rng exceeds completed_dist     */
+/*   or obstacle is abaft the tow's beam by threshold.      */
 /************************************************************/
 
 #include <iostream>
@@ -773,7 +795,7 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
 
   m_obship_model.setCachedVals();
 
-  // Skip if obstacle is aft of ownship, unless tow is active (tow may differ)
+  // Skip if obstacle is well aft of ownship, unless tow is active
   if(m_obship_model.isObstacleAft(20)) {
     if(!(m_tow_pose_valid && (m_rng_src=="tow")))
       return 0;
