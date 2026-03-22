@@ -68,6 +68,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   // Tow-specific vars
   m_tow_pad           = 0.0;
   m_abaft_beam_thresh = -1;
+  m_post_view_points  = true;
   m_towed_x      = 0;
   m_towed_y      = 0;
 
@@ -249,6 +250,9 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
     m_sim_horizon = dval;
     return(true);
   }
+
+  else if(param == "post_view_points")
+    return(setBooleanOnString(m_post_view_points, val));
 
   else
     return(false);
@@ -707,30 +711,32 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   }
 
   // Visualize tow actual pose and cable attachment point
-  if(m_tow_pose_valid)
-  {
-    XYPoint tow_act(m_towed_x, m_towed_y);
-    tow_act.set_label("tow_act");
-    tow_act.set_color("vertex", "yellow");
-    tow_act.set_vertex_size(3);
-    postMessage("VIEW_POINT", tow_act.get_spec());
+  if(m_post_view_points) {
+    if(m_tow_pose_valid)
+    {
+      XYPoint tow_act(m_towed_x, m_towed_y);
+      tow_act.set_label("tow_act");
+      tow_act.set_color("vertex", "yellow");
+      tow_act.set_vertex_size(3);
+      postMessage("VIEW_POINT", tow_act.get_spec());
 
-    XYPoint cable_n0(node0_x, node0_y);
-    cable_n0.set_label("cable_n0");
-    cable_n0.set_color("vertex", "orange");
-    cable_n0.set_vertex_size(3);
-    postMessage("VIEW_POINT", cable_n0.get_spec());
-  }
-  else {
-    XYPoint tow_act(0, 0);
-    tow_act.set_label("tow_act");
-    tow_act.set_active(false);
-    postMessage("VIEW_POINT", tow_act.get_spec());
+      XYPoint cable_n0(node0_x, node0_y);
+      cable_n0.set_label("cable_n0");
+      cable_n0.set_color("vertex", "orange");
+      cable_n0.set_vertex_size(3);
+      postMessage("VIEW_POINT", cable_n0.get_spec());
+    }
+    else {
+      XYPoint tow_act(0, 0);
+      tow_act.set_label("tow_act");
+      tow_act.set_active(false);
+      postMessage("VIEW_POINT", tow_act.get_spec());
 
-    XYPoint cable_n0(0, 0);
-    cable_n0.set_label("cable_n0");
-    cable_n0.set_active(false);
-    postMessage("VIEW_POINT", cable_n0.get_spec());
+      XYPoint cable_n0(0, 0);
+      cable_n0.set_label("cable_n0");
+      cable_n0.set_active(false);
+      postMessage("VIEW_POINT", cable_n0.get_spec());
+    }
   }
 
 }
@@ -836,22 +842,25 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
 
   OF_Reflector reflector(&aof_avoid, 1);
 
-  // Refine regions using tow pose/heading as effective ownship
+  // Refine regions: use vessel perspective while approaching, switch
+  // to tow perspective once the vessel has passed the obstacle.
+  // This ensures the refinery always reflects the component that is
+  // closest to / most at risk from the obstacle.
   if(m_use_refinery) {
     RefineryObAvoidV24 refinery(m_domain);
     refinery.setSideLock(m_side_lock);
 
     ObShipModelV24 refine_model = m_obship_model;
 
-    if(m_tow_pose_valid)
+    // Once the obstacle is aft of the vessel, the cable/tow is the
+    // vulnerable component — switch the refinery to tow perspective.
+    if(m_tow_pose_valid && m_obship_model.isObstacleAft(0))
     {
       double tow_hdg = m_obship_model.getOSH();
       bool okvx=true, okvy=true;
       double towed_vx = getBufferDoubleVal("TOWED_VX", okvx);
       double towed_vy = getBufferDoubleVal("TOWED_VY", okvy);
-
-      if(okvx && okvy)
-      {
+      if(okvx && okvy) {
         double spd = hypot(towed_vx, towed_vy);
         if(spd > 1e-6)
           tow_hdg = relAng(0, 0, towed_vx, towed_vy);

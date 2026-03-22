@@ -80,6 +80,7 @@ protected: // Configuration parameters
   //Tow Specific Additions
   double m_tow_pad;
   double m_abaft_beam_thresh;  // degrees abaft the beam for bearing-based completion (-1 = disabled)
+  bool   m_post_view_points;
 
 protected: // State variables
   double  m_obstacle_relevance;
