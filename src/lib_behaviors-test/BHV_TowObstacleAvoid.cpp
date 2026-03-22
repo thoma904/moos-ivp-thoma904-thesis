@@ -84,6 +84,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
   m_closing = false;
 
   m_holonomic_ok = false;
+  m_allstop_on_breach = true;
 
   // Tow-specific vars
   m_tow_pad           = 0.0;
@@ -264,6 +265,9 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if(param == "post_view_points")
     return(setBooleanOnString(m_post_view_points, val));
+
+  else if(param == "allstop_on_breach")
+    return(setBooleanOnString(m_allstop_on_breach, val));
 
   else
     return(false);
@@ -587,10 +591,11 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     os_range_to_poly = m_rng_sys;
   }
 
-  // Range is only valid when tow-derived this iteration
+  // Range is valid when tow-derived or NAV-derived
   bool tow_sys_valid = (m_tow_pose_valid && (m_rng_src == "tow") && (m_rng_sys >= 0));
+  bool range_valid = tow_sys_valid || (m_rng_nav >= 0);
 
-  if(tow_sys_valid)
+  if(range_valid)
   {
     if((m_cpa_rng_ever < 0) || (os_range_to_poly < m_cpa_rng_ever))
       m_cpa_rng_ever = os_range_to_poly;
@@ -610,7 +615,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   if(m_rng_thresh.size() != m_rng_flags.size()) {
   postWMessage("Range flag mismatch");
   }
-  else if(tow_sys_valid) {
+  else if(range_valid) {
     vector<VarDataPair> rng_flags;
     for(unsigned int i=0; i<m_rng_thresh.size(); i++) {
       double thresh = m_rng_thresh[i];
@@ -623,7 +628,7 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
   // =================================================================
   // Part 4: Handle CPA flags on CPA events
   // =================================================================
-  if(tow_sys_valid)
+  if(range_valid)
   {
     bool cpa_event = false;
     if((m_cpa_rng_sofar < 0) || (m_fpa_rng_sofar < 0)) {
@@ -739,6 +744,7 @@ void BHV_TowObstacleAvoid::onIdleState()
 
 void BHV_TowObstacleAvoid::onIdleToRunState()
 {
+  m_tow_engaged = false;
   postConfigStatus();
 }
 
@@ -765,8 +771,19 @@ IvPFunction* BHV_TowObstacleAvoid::onRunState()
   
   IvPFunction* ipf = buildOF();
 
-  if(!ipf)
+  if(!ipf) {
+    if(m_allstop_on_breach)
+      postEMessage("Allstop: Obstacle Breached");
+    else
+      postWMessage("Obstacle Breached");
     return(0);
+  }
+
+  if(ipf->getValMaxUtil() == 0) {
+    postEMessage("Allstop: obstacle unavoidable");
+    delete(ipf);
+    return(0);
+  }
 
   return(ipf);
 }
@@ -890,20 +907,22 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
 
 double BHV_TowObstacleAvoid::getRelevance()
 {
-  if(!(m_tow_pose_valid && (m_rng_sys >= 0)))
-    return(0);
-
-  double range_relevance = m_obship_model.getRangeRelevance();
+  double range_relevance = 0;
 
   if(m_tow_pose_valid && (m_rng_sys >= 0))
     range_relevance = computeRangeRelevanceFromRange(m_rng_sys);
+  else
+    range_relevance = m_obship_model.getRangeRelevance();
 
   if(range_relevance <= 0)
     return(0);
 
-  // TTC gate: skip if time-to-contact exceeds allowable_ttc
+  // TTC gate: skip if time-to-contact exceeds allowable_ttc.
+  // Never disengage via TTC when already inside pwt_inner_dist —
+  // a stopped vehicle near an obstacle must keep the behavior active.
   double allowable_ttc = m_obship_model.getAllowableTTC();
-  if(allowable_ttc > 0) {
+  double active_range = (m_tow_pose_valid && m_rng_sys >= 0) ? m_rng_sys : m_rng_nav;
+  if(allowable_ttc > 0 && active_range > m_obship_model.getPwtInnerDist()) {
     double tow_spd = 0;
     if(m_towed_vel_valid)
       tow_spd = hypot(m_towed_vx, m_towed_vy);

@@ -75,6 +75,7 @@ protected: // Configuration parameters
   bool m_draw_buff_max_poly;
 
   bool m_holonomic_ok;
+  bool m_allstop_on_breach;
 
   //Tow Specific Additions
   double m_tow_pad;
