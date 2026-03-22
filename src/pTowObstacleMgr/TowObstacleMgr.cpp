@@ -2,7 +2,7 @@
 /*    NAME: Tom Monaghan                                    */
 /*    ORGN: MIT, Cambridge MA                               */
 /*    FILE: TowObstacleMgr.cpp                              */
-/*    DATE: December 29th, 1963                             */
+/*    DATE: March 2026                                      */
 /************************************************************/
 
 #include <iterator>
@@ -76,7 +76,7 @@ TowObstacleMgr::TowObstacleMgr()
   m_given_obs_var = "GIVEN_OBSTACLE";  // default; configurable
   m_alert_var = "";    // Initially no alerts will be posted
 
-  //Tow Specific Additions
+
   m_use_tow = false;
   m_tow_deployed = false;
   m_towed_x = 0;
@@ -120,17 +120,8 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
     string sval   = msg.GetString(); 
     double dval   = msg.GetDouble();
 
-#if 0 // Keep these around just for template
-    string comm  = msg.GetCommunity();
-    string msrc  = msg.GetSource();
-    double mtime = msg.GetTime();
-    bool   mdbl  = msg.IsDouble();
-    bool   mstr  = msg.IsString();
-#endif
-
-    // Consider mail handled by default if handled by mail_flag_set
     bool handled = m_mfset.handleMail(key, m_curr_time);
-    
+
     if(key == m_point_var)
       handled = handleMailNewPoint(sval);
     if(key == "NAV_X") {
@@ -141,16 +132,6 @@ bool TowObstacleMgr::OnNewMail(MOOSMSG_LIST &NewMail)
       m_nav_y = dval;
       handled = true;
     }
-
-    //Tow Specific Additions
-    /*else if(key == "TOWED_X") {
-      m_towed_x = dval;
-      handled = true;
-    }
-    else if(key == "TOWED_Y") {
-      m_towed_y = dval;
-      handled = true;
-    }*/
 
     else if(key == "TOWED_X") {
       m_towed_x = dval;
@@ -275,8 +256,7 @@ bool TowObstacleMgr::Iterate()
   updatePolyRanges();
   postConvexHullUpdates();
 
-  //Notify("TOWMGR_TOW_DEPLOYED", m_tow_deployed ? "true" : "false");
-  Notify("TOWMGR_TOW_ONLY",     m_tow_only ? "true" : "false");
+  Notify("TOWMGR_TOW_ONLY", m_tow_only ? "true" : "false");
 
   if(m_use_tow && m_tow_pose_valid && m_post_view_point) {
     XYPoint towpt(m_towed_x, m_towed_y);
@@ -371,7 +351,7 @@ bool TowObstacleMgr::OnStartUp()
       }
     }
     
-    //Tow Specific Additions
+  
     else if(param == "use_tow")
       handled = setBooleanOnString(m_use_tow, value);
     else if(param == "use_tow_cable")
@@ -442,7 +422,7 @@ void TowObstacleMgr::registerVariables()
   Register(m_given_obs_var, 0);
   Register("OBM_ALERT_REQUEST",0);
 
-  //Tow Specific Additions
+
   Register("TOWED_X",0);
   Register("TOWED_Y",0);
   Register("TOW_DEPLOYED",0);
@@ -719,24 +699,6 @@ bool TowObstacleMgr::handleMailNewPoint(string value)
   if(m_ignore_range > 0) {
     double ptx = newpt.get_vx();
     double pty = newpt.get_vy();
-    //double range = hypot(m_nav_x - ptx, m_nav_y - pty);
-
-    /*double ox = m_nav_x;
-    double oy = m_nav_y;
-
-    // Tow-only: ignore range relative to tow if we have tow pose
-    if(m_use_tow && m_tow_pose_valid) {
-      ox = m_towed_x;
-      oy = m_towed_y;
-    }
-
-    double range = hypot(ox - ptx, oy - pty);
-
-
-    if(range > m_ignore_range) {
-      m_points_ignored++;
-      return(true);
-    }*/
 
     double range_nav = hypot(m_nav_x - ptx, m_nav_y - pty);
     double range_use = range_nav;
@@ -860,7 +822,6 @@ bool TowObstacleMgr::updatePointHulls()
       string poly_str = poly.get_spec(5);
       Notify("VIEW_POLYGON", poly_str);
     }
-    //p->second.setChanged(false);
   }
   
   return(true);
@@ -986,12 +947,7 @@ void TowObstacleMgr::postConvexHullUpdates()
     Obstacle obs = p->second;
     XYPolygon poly = obs.getPoly();
 
-    // Double check it is convex
     if(poly.is_convex()) {
-      //double dist = poly.dist_to_poly(m_nav_x, m_nav_y);
-      //bool close_range = (dist <= m_alert_range);
-
-      // Tow Specific Additions
       double d_nav, d_tow, d_cable;
       double dist = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
       dist = std::max(0.0, dist - m_tow_pad);
@@ -1017,7 +973,6 @@ void TowObstacleMgr::postConvexHullUpdates()
       {
 	string msg = toupper(key) + "," + doubleToString(dist,1);
 	Notify("OBM_DIST_TO_OBJ", msg);
-	//reportEvent("OBM_DIST_TO_OBJ="+msg);
       }
 
       bool changed = m_map_obstacles[key].hasChanged();
@@ -1066,24 +1021,11 @@ void TowObstacleMgr::postConvexHullUpdate(string key, string alert_var,
   string update_str = "name=" + alert_name + key + "#";
   update_str += "poly=" + poly.get_spec_pts(5) + ",label=" + key;
 
-  //string source = poly.get_source();
   string vsource = m_map_obstacles[key].getVSource();
   if(vsource != "")
     update_str += ",vsource=" + vsource;
 
-  // mikerb May1425
   update_str += "#id=" + key;
-
-
-  // Tow Specific Additions
-  double d_nav, d_tow, d_cable;
-  double d_sys = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
-  d_sys = std::max(0.0, d_sys - m_tow_pad);
-
-  //update_str += "#dist_sys="   + doubleToStringX(d_sys,   1);
-  //update_str += "#dist_nav="   + doubleToStringX(d_nav,   1);
-  //update_str += "#dist_tow="   + doubleToStringX(d_tow,   1);
-  //update_str += "#dist_cable=" + doubleToStringX(d_cable, 1);
 
   m_alerts_posted++;  
   Notify(alert_var, update_str);
@@ -1135,7 +1077,7 @@ XYPolygon TowObstacleMgr::placeholderConvexHull(string key)
 }
 
 //------------------------------------------------------------
-// Procedure: getPseudoHul()
+// Procedure: genPseudoHull()
 
 XYPolygon TowObstacleMgr::genPseudoHull(const vector<XYPoint>& pts, 
 					 double radius)
@@ -1180,9 +1122,7 @@ void TowObstacleMgr::updatePolyRanges()
   for(p=m_map_obstacles.begin(); p!=m_map_obstacles.end(); p++) {
     string    key   = p->first;
     XYPolygon poly  = p->second.getPoly();
-    //double    range = poly.dist_to_poly(m_nav_x, m_nav_y);
 
-    // Tow Specific Additions
     double d_nav, d_tow, d_cable;
     double range = distPointToPolySystem(poly, d_nav, d_tow, d_cable);
     range = std::max(0.0, range - m_tow_pad);   // optional pad
@@ -1536,40 +1476,28 @@ bool TowObstacleMgr::buildReport()
 }
 
 //---------------------------------------------------------
-// Tow Cable Helper Function for calculating cable distance
+// Procedure: distPointToPolySystem()
+//   Purpose: Compute distance from the vessel/tow/cable system to
+//            an obstacle polygon. Returns the minimum system distance
+//            and populates d_nav, d_tow, d_cable individually.
 
 double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
                                              double& d_nav,
                                              double& d_tow,
                                              double& d_cable) const
 {
-  // Optional debug only
   d_nav = poly.dist_to_poly(m_nav_x, m_nav_y);
 
   d_tow   = 1e9;
   d_cable = 1e9;
 
-  // Tow is "ok" if enabled AND we have received tow pose at least once.
   bool tow_ok = (m_use_tow && m_tow_pose_valid);
 
-  // Tow-only mode: if tow pose not valid yet, treat as "unknown / far"
-  // (This is NOT a deploy gate; it's a data validity guard.)
-  /*if(m_tow_only && !tow_ok)
-    return(1e9);
-
-  // Tow-only: if tow is not ok, don't fall back to NAV.
-  if(!tow_ok)
-    return(1e9);*/
-
-
   if(!tow_ok) {
-  d_tow   = 1e9;
-  d_cable = 1e9;
-  return(m_tow_only ? 1e9 : d_nav);
+    d_tow   = 1e9;
+    d_cable = 1e9;
+    return(m_tow_only ? 1e9 : d_nav);
   }
-
-
-
 
   // Tow distance
   d_tow = poly.dist_to_poly(m_towed_x, m_towed_y);
@@ -1636,5 +1564,3 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
 
   return(d_sys);
 }
-
-//potentially remove tow pose valid gates and tow deployed gate since behavior doesn't depend on them anymore
