@@ -141,7 +141,7 @@ Behavior=BHV_TowObstacleAvoid
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
 
-  tow_pad = 1.0
+  tow_pad = 5.0
   abaft_beam_thresh = 45
 }
 
@@ -157,8 +157,8 @@ Behavior=BHV_AvoidObstacleV24
       allowable_ttc = 20
 	min_util_cpa_dist = 2.5
 	max_util_cpa_dist = 5
-     pwt_outer_dist = 30        
-     pwt_inner_dist = 20
+     pwt_outer_dist = 25        
+     pwt_inner_dist = 15
      completed_dist = 45
      allstop_on_breach = false
 
