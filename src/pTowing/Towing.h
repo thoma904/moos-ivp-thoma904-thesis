@@ -30,6 +30,7 @@ class Towing : public AppCastingMOOSApp
    void registerVariables();
 
  private: // Configuration variables
+  std::string join(const std::vector<std::string> &vec, const std::string &delim);
 
  private: // State variables
  double m_nav_x;
@@ -41,7 +42,22 @@ class Towing : public AppCastingMOOSApp
  XYSegList m_towing_position;
  double m_start_x;
  double m_start_y;
- double m_nav_speed;
+ double m_prev_heading;
+ double m_towed_vx; // Velocity of towed body in x direction
+ double m_towed_vy; // Velocity of towed body in y direction
+ double m_prev_time; // Previous time for velocity calculation
+ bool m_deployed;
+ double m_cable_distance; //for trouble-shooting
+ double m_nav_speed; // Vessel speed
+ double m_nav_vx; // Vessel velocity in x direction
+ double m_nav_vy; // Vessel velocity in y direction
+ double m_attach_offset;   // distance from NAV_ reference to tow hook [m]
+ double m_anchor_x;        // world x of tow hook
+ double m_anchor_y;        // world y of tow hook
+ double m_spring_stiffness; // spring stiffness constant
+ double m_cd;               // drag coefficient
+ double m_tan_damping; // tangential damping constant
+ bool m_post_cable;
 };
 
 #endif 
