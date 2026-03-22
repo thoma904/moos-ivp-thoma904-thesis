@@ -2,7 +2,7 @@
 /*    NAME: Tom Monaghan                                              */
 /*    ORGN: MIT, Cambridge MA                               */
 /*    FILE: Cable.cpp                                        */
-/*    DATE: December 29th, 1963                             */
+/*    DATE: March 2026                                      */
 /************************************************************/
 
 #include <iterator>
@@ -19,7 +19,7 @@ using namespace std;
 
 Cable::Cable()
 {
-  // Configuration defaults (match pTowing1)
+  // Configuration defaults (match pTowing)
   m_cable_length      = 30.0;
   m_attach_offset     = 0.0;
   m_k_spring          = 5.0;
@@ -58,16 +58,6 @@ bool Cable::OnNewMail(MOOSMSG_LIST &NewMail)
     CMOOSMsg &msg = *p;
     string key    = msg.GetKey();
 
-#if 0 // Keep these around just for template
-    string comm  = msg.GetCommunity();
-    double dval  = msg.GetDouble();
-    string sval  = msg.GetString(); 
-    string msrc  = msg.GetSource();
-    double mtime = msg.GetTime();
-    bool   mdbl  = msg.IsDouble();
-    bool   mstr  = msg.IsString();
-#endif
-
     if(key == "NAV_X")
       m_nav_x = msg.GetDouble();
     else if(key == "NAV_Y")
@@ -78,7 +68,7 @@ bool Cable::OnNewMail(MOOSMSG_LIST &NewMail)
       m_towed_x = msg.GetDouble();
     else if(key == "TOWED_Y")
       m_towed_y = msg.GetDouble();
-    // Dynamic parameter sync from pTowing1
+    // Dynamic parameter sync from pTowing
     else if(key == "TOW_CABLE_LENGTH") {
       m_cable_length = msg.GetDouble();
       if(m_cable_length < 30.0)

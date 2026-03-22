@@ -2,7 +2,7 @@
 /*    NAME: Tom Monaghan                                              */
 /*    ORGN: MIT, Cambridge MA                               */
 /*    FILE: Cable.h                                          */
-/*    DATE: December 29th, 1963                             */
+/*    DATE: March 2026                                      */
 /************************************************************/
 
 #ifndef Cable_HEADER
