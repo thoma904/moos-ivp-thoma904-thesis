@@ -176,6 +176,8 @@ private: // State variables
   std::map<std::string, double> m_last_post_time;
 
   bool m_post_view_point;
+  bool m_tow_only_prev;
+  bool m_tow_only_first;
 
 protected: // Rel 24.8.x For users using cmgr for dis/enabling bhvs
  

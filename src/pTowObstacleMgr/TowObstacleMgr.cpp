@@ -104,6 +104,8 @@ TowObstacleMgr::TowObstacleMgr()
   m_cable_nodes_valid = false;
 
   m_post_view_point = true;
+  m_tow_only_prev  = false;
+  m_tow_only_first = true;
 }
 
 //---------------------------------------------------------
@@ -256,7 +258,11 @@ bool TowObstacleMgr::Iterate()
   updatePolyRanges();
   postConvexHullUpdates();
 
-  Notify("TOWMGR_TOW_ONLY", m_tow_only ? "true" : "false");
+  if(m_tow_only_first || (m_tow_only != m_tow_only_prev)) {
+    Notify("TOWMGR_TOW_ONLY", m_tow_only ? "true" : "false");
+    m_tow_only_prev  = m_tow_only;
+    m_tow_only_first = false;
+  }
 
   if(m_use_tow && m_tow_pose_valid && m_post_view_point) {
     XYPoint towpt(m_towed_x, m_towed_y);
@@ -871,8 +877,10 @@ bool TowObstacleMgr::handleMailAlertRequest(string request)
   if(m_alert_var != "" && update_var != m_alert_var)
     return(true);   // silently ignore non-matching requests
 
-  // Alert request is valid, go ahead and set
-  //m_alert_var = update_var;
+  // Alert request is valid, go ahead and set.
+  // Set alert_var only if not yet configured (first request wins).
+  if(m_alert_var == "")
+    m_alert_var = update_var;
   m_alert_name = name;
   m_alert_range = d_alert_range;
 
