@@ -268,6 +268,12 @@ bool TowObstacleSim::OnStartUp()
   // Compute the tow/vehicle split: first half for tow
   m_tow_split = m_obstacles.size() / 2;
 
+  // Apply tow-specific colors to the initial obstacles
+  for(unsigned int i=0; i<m_tow_split; i++) {
+    m_obstacles[i].set_color("edge", m_tow_edge_color);
+    m_obstacles[i].set_color("fill", m_tow_fill_color);
+  }
+
   m_reset_tstamp = MOOSTime();
   handleConfigObstacleDurations();
   registerVariables();
