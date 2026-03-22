@@ -125,7 +125,7 @@ Behavior=BHV_TowObstacleAvoid
        use_refinery = true
       allowable_ttc = 20
 	min_util_cpa_dist = 2.5
-	max_util_cpa_dist = 10
+	max_util_cpa_dist = 5
      pwt_outer_dist = 20
      pwt_inner_dist = 10
      completed_dist = 25
@@ -140,6 +140,7 @@ Behavior=BHV_TowObstacleAvoid
 
   tow_pad = 1.0
   abaft_beam_thresh = 45
+  post_view_points = false
 }
 
 Behavior=BHV_AvoidObstacleV24
@@ -153,10 +154,10 @@ Behavior=BHV_AvoidObstacleV24
        use_refinery = true
       allowable_ttc = 20
 	min_util_cpa_dist = 2.5
-	max_util_cpa_dist = 10
-     pwt_outer_dist = 30        
-     pwt_inner_dist = 20
-     completed_dist = 60
+	max_util_cpa_dist = 5
+     pwt_outer_dist = 25        
+     pwt_inner_dist = 15
+     completed_dist = 45
      allstop_on_breach = false
 
 	rng_flag = <50 RANGE = $[RNG]

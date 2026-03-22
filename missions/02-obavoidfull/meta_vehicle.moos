@@ -246,6 +246,7 @@ ProcessConfig = pTowObstacleMgr
   tow_pad = 0.5
   abaft_beam_thresh = 20
   tow_only=true
+  post_view_point = false
 } 
 
 //------------------------------------------
