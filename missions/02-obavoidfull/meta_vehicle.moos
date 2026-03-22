@@ -234,6 +234,7 @@ ProcessConfig = pTowObstacleMgr
 	general_alert = update_var=GEN_ALERT, alert_range=400000
 
   alert_var = TOW_OBSTACLE_ALERT
+  repost_interval = 0
 
   max_age_per_point = 90
 
