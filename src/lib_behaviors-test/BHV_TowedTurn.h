@@ -1,7 +1,7 @@
 /************************************************************/
-/*    NAME: Tom Monaghan                                              */
+/*    NAME: Tom Monaghan                                    */
 /*    ORGN: MIT                                             */
-/*    FILE: BHV_TowedTurn.h                                      */
+/*    FILE: BHV_TowedTurn.h                                 */
 /*    DATE:                                                 */
 /************************************************************/
 
@@ -15,7 +15,7 @@ class BHV_TowedTurn : public IvPBehavior {
 public:
   BHV_TowedTurn(IvPDomain);
   ~BHV_TowedTurn() {};
-  
+
   bool         setParam(std::string, std::string);
   void         onSetParamComplete();
   void         onCompleteState();
@@ -26,27 +26,24 @@ public:
   void         onIdleToRunState();
   IvPFunction* onRunState();
 
-protected: // Local Utility functions
-
 protected: // Configuration parameters
+  double m_jog_angle;     // degrees to jog opposite before sweeping
 
 protected: // State variables
-
-  double m_turn_dir;
-  double m_target_hdg;
+  int    m_turn_dir;      // +1 = starboard, -1 = port (computed from next WP)
+  double m_target_hdg;    // reciprocal of entry heading
+  double m_jog_hdg;       // phase 1 jog heading
 
   bool   m_entry_hdg_set;
   double m_entry_hdg;
 
-  bool  m_phase1_done;
-  double m_phase1_hdg;
-
+  bool   m_jog_done;
 };
 
 #define IVP_EXPORT_FUNCTION
 
 extern "C" {
-  IVP_EXPORT_FUNCTION IvPBehavior * createBehavior(std::string name, IvPDomain domain) 
+  IVP_EXPORT_FUNCTION IvPBehavior * createBehavior(std::string name, IvPDomain domain)
   {return new BHV_TowedTurn(domain);}
 }
 #endif
