@@ -53,3 +53,27 @@ TARGET_LINK_LIBRARIES(BHV_TowObstacleAvoid
    logic 
    ivpcore  
    ${SYSTEM_LIBS} )
+
+#--------------------------------------------------------
+#                                      BHV_TowedTurn
+#--------------------------------------------------------
+ADD_LIBRARY(BHV_TowedTurn SHARED 
+   BHV_TowedTurn.cpp)
+TARGET_LINK_LIBRARIES(BHV_TowedTurn
+   mbutil
+   geometry
+   bhvutil    
+   behaviors
+   helmivp 
+   ivpbuild 
+   logic 
+   ivpcore
+   mbutil
+   geometry
+   bhvutil    
+   behaviors
+   helmivp 
+   ivpbuild 
+   logic 
+   ivpcore  
+   ${SYSTEM_LIBS} )
