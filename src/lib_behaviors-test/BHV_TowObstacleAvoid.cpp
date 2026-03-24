@@ -851,7 +851,7 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
 
     // Once the obstacle is aft of the vessel, the cable/tow is the
     // vulnerable component — switch the refinery to tow perspective.
-    if(m_tow_pose_valid && m_obship_model.isObstacleAft(0))
+    if(m_tow_pose_valid && m_obship_model.isObstacleAft(20))
     {
       double tow_hdg = m_obship_model.getOSH();
       bool okvx=true, okvy=true;
