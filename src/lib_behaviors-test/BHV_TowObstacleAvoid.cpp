@@ -1338,6 +1338,31 @@ double BHV_TowObstacleAvoid::cableMinDistToPoly(
     if(min_dist <= 0)
       return 0;
   }
+
+  // Interpolate between adjacent relaxed nodes
+  if(m_cable_sample_step > 0.1) {
+    for(int i = 0; i + 1 < num_nodes; i++) {
+      double dx = nx[i+1] - nx[i];
+      double dy = ny[i+1] - ny[i];
+      double seg_len = hypot(dx, dy);
+      if(seg_len > m_cable_sample_step) {
+        int samples = (int)ceil(seg_len / m_cable_sample_step);
+        for(int s = 1; s < samples; s++) {
+          double frac = (double)s / (double)samples;
+          double sx = nx[i] + frac * dx;
+          double sy = ny[i] + frac * dy;
+          double d = poly.dist_to_poly(sx, sy);
+          if(d < 0) d = 0;
+          d = std::max(0.0, d - m_tow_pad);
+          if(d < min_dist)
+            min_dist = d;
+          if(min_dist <= 0)
+            return 0;
+        }
+      }
+    }
+  }
+
   return min_dist;
 }
 
