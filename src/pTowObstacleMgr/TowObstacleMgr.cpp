@@ -86,7 +86,7 @@ TowObstacleMgr::TowObstacleMgr()
   m_cable_sample_step = 1.0;
   m_tow_pad = 0.0;
 
-  m_repost_interval = 1.0; // 1 Hz keepalive (tune as needed)
+  m_repost_interval = 0.0; // keepalive off by default
   m_tow_only = true;
 
   m_tow_pose_valid = false;
