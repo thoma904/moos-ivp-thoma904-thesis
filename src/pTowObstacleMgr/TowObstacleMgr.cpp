@@ -1384,64 +1384,53 @@ string TowObstacleMgr::expandMacros(string sdata) const
 
 bool TowObstacleMgr::buildReport() 
 {
-  string str_lasso     = boolToString(m_lasso);
-  string str_lasso_pts = uintToString(m_lasso_points);
-  string str_lasso_rad = doubleToStringX(m_lasso_radius);
-
   string str_alert_rng  = doubleToStringX(m_alert_range,1);
-  string str_gen_alert_rng  = doubleToStringX(m_gen_alert_range,1);
   string str_ignore_rng = doubleToStringX(m_ignore_range,1);
-
-  string str_max_pts_per = uintToString(m_max_pts_per_cluster);
-  string str_max_age_per = doubleToStringX(m_max_age_per_point);
 
   string str_navx = doubleToStringX(m_nav_x,1);
   string str_navy = doubleToStringX(m_nav_y,1);
   string str_nav = "(" + str_navx + "," + str_navy + ")";
 
-  string str_post_view_polys = boolToString(m_post_view_polys);
+  string str_towx = doubleToStringX(m_towed_x,1);
+  string str_towy = doubleToStringX(m_towed_y,1);
+  string str_tow = "(" + str_towx + "," + str_towy + ")";
 
   string str_min_dist_ever = doubleToStringX(m_min_dist_ever,1);
-  
-  m_msgs << "Configuration (point handling):             " << endl;
-  m_msgs << "  point_var:    " << m_point_var              << endl;
-  m_msgs << "  max_pts_per_cluster: " << str_max_pts_per   << endl;
-  m_msgs << "  max_age_per_point:   " << str_max_age_per   << endl;
-  m_msgs << "  ignore_range:        " << str_ignore_rng    << endl;
-  m_msgs << "Configuration (given_obstacles):            " << endl;
-  m_msgs << "  given_max_duration: " << m_given_max_duration << endl;
-  m_msgs << "Configuration (viewing):                    " << endl;
-  m_msgs << "  post_dist_to_polys: " << m_post_dist_to_polys << endl;
-  m_msgs << "  post_view_polys:    " << str_post_view_polys  << endl;
-  m_msgs << "  obstacle color:     " << m_obstacles_color  << endl;
+
   m_msgs << "Configuration (alerts):                     " << endl;
   m_msgs << "  alert_var:   " << m_alert_var               << endl;
   m_msgs << "  alert_name:  " << m_alert_name              << endl;
   m_msgs << "  alert_range: " << str_alert_rng             << endl;
-  m_msgs << "Configuration (general alert):              " << endl;
-  m_msgs << "  gen_alert_var:   " << m_gen_alert_var       << endl;
-  m_msgs << "  gen_alert_name:  " << m_gen_alert_name      << endl;
-  m_msgs << "  gen_alert_range: " << str_gen_alert_rng     << endl;
-  m_msgs << "Configuration (lasso option):               " << endl;
-  m_msgs << "  lasso:        " << str_lasso                << endl;
-  m_msgs << "  lasso_points: " << str_lasso_pts            << endl;
-  m_msgs << "  lasso_radius: " << str_lasso_rad            << endl;
+  m_msgs << "  ignore_range:        " << str_ignore_rng    << endl;
+  m_msgs << "Configuration (tow):                        " << endl;
+  m_msgs << "  use_tow:             " << boolToString(m_use_tow) << endl;
+  m_msgs << "  tow_only:            " << boolToString(m_tow_only) << endl;
+  m_msgs << "  use_tow_cable:       " << boolToString(m_use_tow_cable) << endl;
+  m_msgs << "  attach_offset:       " << doubleToStringX(m_attach_offset,2) << endl;
+  m_msgs << "  cable_sample_step:   " << doubleToStringX(m_cable_sample_step,2) << endl;
+  m_msgs << "  tow_pad:             " << doubleToStringX(m_tow_pad,2) << endl;
+  m_msgs << "  repost_interval:     " << doubleToStringX(m_repost_interval,2) << endl;
+  m_msgs << "  abaft_beam_thresh:   " << doubleToStringX(m_abaft_beam_thresh,1) << endl;
   m_msgs << "============================================" << endl;
-  m_msgs << "State: (Nav)                                " << endl;
+  m_msgs << "State (nav):                                " << endl;
   m_msgs << "  Nav Position:      " << str_nav             << endl;
-  m_msgs << "State: (points):                            " << endl;
+  m_msgs << "  Nav Heading:       " << doubleToStringX(m_nav_hdg,1) << endl;
+  m_msgs << "State (tow):                                " << endl;
+  m_msgs << "  Tow Position:      " << str_tow             << endl;
+  m_msgs << "  Tow Pose Valid:    " << boolToString(m_tow_pose_valid) << endl;
+  m_msgs << "  Tow Deployed:      " << boolToString(m_tow_deployed) << endl;
+  m_msgs << "  Cable Nodes Valid: " << boolToString(m_cable_nodes_valid) << endl;
+  if(m_cable_nodes_valid)
+    m_msgs << "  Cable Nodes:       " << m_cable_node_x.size() << endl;
+  m_msgs << "State (points):                             " << endl;
   m_msgs << "  Points Received:   " << m_points_total      << endl;
   m_msgs << "  Points Invalid:    " << m_points_invalid    << endl;
   m_msgs << "  Points Ignored:    " << m_points_ignored    << endl;
-  m_msgs << "State: (given_obstacles):                   " << endl;
-  m_msgs << "  Given Obstacles (mail) ever: " << m_given_mail_ever << endl;
-  m_msgs << "  Given Obstacles (mail) good: " << m_given_mail_good << endl;
-  m_msgs << "  Given Obstacles (config):    " << m_given_config_ever << endl;
-  m_msgs << "State: (obstacles):                         " << endl;
+  m_msgs << "State (obstacles):                          " << endl;
   m_msgs << "  Obstacles:          " << m_map_obstacles.size() << endl;
   m_msgs << "  Obstacles released: " << m_obstacles_released << endl;
   m_msgs << "  Closest range ever: " << str_min_dist_ever << endl;
-  m_msgs << "State: (alerts):                            " << endl;
+  m_msgs << "State (alerts):                             " << endl;
   m_msgs << "  Alerts Posted:   " << m_alerts_posted   << endl;
   m_msgs << "  Alerts Resolved: " << m_alerts_resolved << endl;
 
