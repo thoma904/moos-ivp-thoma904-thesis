@@ -142,6 +142,7 @@ protected: // State variables
 
   double m_cable_sample_step;
   int    m_cable_check_interval;
+  int    m_cable_start_node;
 
   bool   m_tow_deployed;
 

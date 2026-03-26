@@ -56,6 +56,7 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
   // Cable avoidance
   m_cable_sample_step = 1.0;
   m_cable_check_interval = 5;
+  m_cable_start_node = 0;
 
   // Tow speed penalty (disabled by default)
   m_penalize_low_tow_spd = true;
@@ -201,8 +202,11 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   // simulation step it happened on.  -1 means no contact predicted.
   int contact_step = -1;
 
-  // Check all initial cable nodes for obstacle proximity (replaces straight-line sampling)
-  for(int i = 0; i < num_nodes; i++) {
+  // Skip shallow cable nodes near surface when cable_start_node is set
+  int start = std::min(m_cable_start_node, num_nodes - 1);
+
+  // Check initial cable nodes for obstacle proximity
+  for(int i = start; i < num_nodes; i++) {
     double ds = gut.dist_to_poly(n_x[i], n_y[i]);
     if(ds < 0) ds = 0;
     min_dist = std::min(min_dist, ds);
@@ -260,7 +264,7 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     // Check all cable nodes against obstacle every N steps
     // Always check every step if we're close (min_dist is small)
     if(k % m_cable_check_interval == 0 || min_dist < 5.0) {
-      for(int i = 0; i < num_nodes; i++) {
+      for(int i = start; i < num_nodes; i++) {
         double d = gut.dist_to_poly(n_x[i], n_y[i]);
         if(d < 0) d = 0;
         min_dist = std::min(min_dist, d);

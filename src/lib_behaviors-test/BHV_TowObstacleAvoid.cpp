@@ -134,6 +134,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_cable_sample_step = 1.0;
   m_cable_check_interval = 5;
+  m_cable_start_node = 0;
 
   initVisualHints();
   addInfoVars("NAV_X, NAV_Y, NAV_HEADING");
@@ -244,6 +245,11 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if((param == "cable_check_interval") && isNumber(val) && (int)dval > 0) {
     m_cable_check_interval = (int)dval;
+    return(true);
+  }
+
+  else if((param == "cable_start_node") && isNumber(val) && (int)dval >= 0) {
+    m_cable_start_node = (int)dval;
     return(true);
   }
 
@@ -559,18 +565,33 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     if(tow_rng_actual < 0) tow_rng_actual = 0;
     tow_rng_actual = std::max(0.0, tow_rng_actual - m_tow_pad);
 
-    // Sample along anchor-to-tow cable for closest approach (completion)
+    // Compute cable start position (skip shallow nodes near surface)
+    double start_x = node0_x;
+    double start_y = node0_y;
+    if(m_cable_start_node > 0) {
+      int num_nodes_est;
+      if(m_cable_length < 30.0)
+        num_nodes_est = 3;
+      else
+        num_nodes_est = std::max(3, (int)(m_cable_length / 10.0));
+      int sn = std::min(m_cable_start_node, num_nodes_est - 1);
+      double frac_start = (double)sn / (double)(num_nodes_est - 1);
+      start_x = node0_x + frac_start * (m_towed_x - node0_x);
+      start_y = node0_y + frac_start * (m_towed_y - node0_y);
+    }
+
+    // Sample along cable for closest approach (completion)
     double cable_rng_actual = tow_rng_actual;
     if(m_cable_sample_step > 0.1) {
-      double cx = m_towed_x - node0_x;
-      double cy = m_towed_y - node0_y;
+      double cx = m_towed_x - start_x;
+      double cy = m_towed_y - start_y;
       double clen = std::hypot(cx, cy);
       if(clen > m_cable_sample_step) {
         int samples = (int)ceil(clen / m_cable_sample_step);
         for(int s = 1; s < samples; s++) {
           double frac = (double)s / (double)samples;
-          double sx = node0_x + frac * cx;
-          double sy = node0_y + frac * cy;
+          double sx = start_x + frac * cx;
+          double sy = start_y + frac * cy;
           double ds = gut_poly.dist_to_poly(sx, sy);
           if(ds < 0) ds = 0;
           ds = std::max(0.0, ds - m_tow_pad);
@@ -814,6 +835,7 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
                               m_k_spring, m_cd, m_c_tan);
     aof_avoid.setCableSampleStep(m_cable_sample_step);
     aof_avoid.setCableCheckInterval(m_cable_check_interval);
+    aof_avoid.setCableStartNode(m_cable_start_node);
 
     if(m_tow_deployed) {
       aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
@@ -1327,9 +1349,12 @@ double BHV_TowObstacleAvoid::cableMinDistToPoly(
     }
   }
 
-  // Find minimum distance from any cable node to the polygon
+  // Skip shallow nodes near surface when cable_start_node is set
+  int start = std::min(m_cable_start_node, num_nodes - 1);
+
+  // Find minimum distance from cable nodes to the polygon
   double min_dist = 1e9;
-  for(int i = 0; i < num_nodes; i++) {
+  for(int i = start; i < num_nodes; i++) {
     double d = poly.dist_to_poly(nx[i], ny[i]);
     if(d < 0) d = 0;
     d = std::max(0.0, d - m_tow_pad);
@@ -1341,7 +1366,7 @@ double BHV_TowObstacleAvoid::cableMinDistToPoly(
 
   // Interpolate between adjacent relaxed nodes
   if(m_cable_sample_step > 0.1) {
-    for(int i = 0; i + 1 < num_nodes; i++) {
+    for(int i = start; i + 1 < num_nodes; i++) {
       double dx = nx[i+1] - nx[i];
       double dy = ny[i+1] - ny[i];
       double seg_len = hypot(dx, dy);
