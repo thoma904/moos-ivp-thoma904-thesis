@@ -84,6 +84,7 @@ TowObstacleMgr::TowObstacleMgr()
 
   m_use_tow_cable = true;
   m_cable_sample_step = 1.0;
+  m_attach_offset = 0.0;
   m_tow_pad = 0.0;
 
   m_repost_interval = 0.0; // keepalive off by default
@@ -364,6 +365,8 @@ bool TowObstacleMgr::OnStartUp()
       handled = setBooleanOnString(m_use_tow_cable, value);
     else if(param == "cable_sample_step")
       handled = setPosDoubleOnString(m_cable_sample_step, value);
+    else if(param == "attach_offset")
+      handled = setNonNegDoubleOnString(m_attach_offset, value);
     else if(param == "tow_pad")
       handled = setDoubleOnString(m_tow_pad, value);
     else if(param == "repost_interval")
@@ -1549,8 +1552,10 @@ double TowObstacleMgr::distPointToPolySystem(const XYPolygon& poly,
       }
     }
     else {
-      // Fallback: straight line from nav to tow (original behavior)
-      double x1 = m_nav_x,   y1 = m_nav_y;
+      // Fallback: straight line from anchor to tow
+      double hdg_rad = (90.0 - m_nav_hdg) * M_PI / 180.0;
+      double x1 = m_nav_x - m_attach_offset * cos(hdg_rad);
+      double y1 = m_nav_y - m_attach_offset * sin(hdg_rad);
       double x2 = m_towed_x, y2 = m_towed_y;
       double seg_len = hypot(x2 - x1, y2 - y1);
       unsigned int samples = 1;

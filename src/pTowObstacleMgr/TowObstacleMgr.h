@@ -160,6 +160,7 @@ private: // State variables
   // Cable distance approximation
   bool   m_use_tow_cable;
   double m_cable_sample_step;     // meters (e.g., 0.5 or 1.0)
+  double m_attach_offset;         // meters aft of NAV for anchor point
 
   // Cable node positions from pCable
   std::vector<double> m_cable_node_x;
