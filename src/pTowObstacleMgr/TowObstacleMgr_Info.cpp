@@ -109,12 +109,13 @@ void showExampleConfigAndExit()
   blk("  expunge_var = XYZ_EXPUNGE_TARGET  // default is empty str     ");
   blk("                                                                ");
   blk("  // Tow-specific parameters                                    ");
-  blk("  use_tow          = true     // default is false               ");
+  blk("  use_tow          = true     // default is true                ");
   blk("  tow_only         = true     // default is true                ");
   blk("  use_tow_cable    = true     // default is true                ");
   blk("  cable_sample_step = 1.0     // (meters) default is 1.0        ");
+  blk("  attach_offset    = 0.0      // (meters) default is 0.0        ");
   blk("  tow_pad          = 0.0      // (meters) default is 0.0        ");
-  blk("  repost_interval  = 1.0      // (secs) default is 1.0          ");
+  blk("  repost_interval  = 0.0      // (secs) default is 0.0 (off)    ");
   blk("  abaft_beam_thresh = off     // degrees or off, default off    ");
   blk("  post_view_point  = true     // default is true                ");
   blk("                                                                ");
