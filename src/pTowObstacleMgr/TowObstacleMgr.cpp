@@ -77,7 +77,7 @@ TowObstacleMgr::TowObstacleMgr()
   m_alert_var = "";    // Initially no alerts will be posted
 
 
-  m_use_tow = false;
+  m_use_tow = true;
   m_tow_deployed = false;
   m_towed_x = 0;
   m_towed_y = 0;
