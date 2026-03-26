@@ -155,7 +155,8 @@ Behavior=BHV_TowObstacleAvoid
 
   tow_pad = 1.0
   abaft_beam_thresh = 45
-  post_view_points = false
+  post_view_points = true
+  cable_start_node = 1
 }
 
 Behavior=BHV_AvoidObstacleV24
