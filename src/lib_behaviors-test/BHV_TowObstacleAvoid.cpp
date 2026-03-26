@@ -452,6 +452,8 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
 
   double node0_x = 0;
   double node0_y = 0;
+  double start_nx = 0;
+  double start_ny = 0;
 
   if(m_tow_pose_valid)
   {
@@ -604,8 +606,11 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
     tow_only_rng = tow_rng_actual;
 
     // Minimum distance from relaxed cable shape to obstacle (drives activation)
+    start_nx = node0_x;
+    start_ny = node0_y;
     double rng_cable = cableMinDistToPoly(node0_x, node0_y,
-                                          m_towed_x, m_towed_y, gut_poly);
+                                          m_towed_x, m_towed_y, gut_poly,
+                                          &start_nx, &start_ny);
     m_rng_tow = rng_cable;
     m_rng_sys = rng_cable;
     m_rng_src = "tow";
@@ -726,11 +731,11 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       tow_act.set_vertex_size(3);
       postMessage("VIEW_POINT", tow_act.get_spec());
 
-      XYPoint cable_n0(node0_x, node0_y);
-      cable_n0.set_label("cable_n0");
-      cable_n0.set_color("vertex", "orange");
-      cable_n0.set_vertex_size(3);
-      postMessage("VIEW_POINT", cable_n0.get_spec());
+      XYPoint cable_start(start_nx, start_ny);
+      cable_start.set_label("cable_start");
+      cable_start.set_color("vertex", "orange");
+      cable_start.set_vertex_size(3);
+      postMessage("VIEW_POINT", cable_start.get_spec());
     }
     else {
       XYPoint tow_act(0, 0);
@@ -738,10 +743,10 @@ void BHV_TowObstacleAvoid::onEveryState(string str)
       tow_act.set_active(false);
       postMessage("VIEW_POINT", tow_act.get_spec());
 
-      XYPoint cable_n0(0, 0);
-      cable_n0.set_label("cable_n0");
-      cable_n0.set_active(false);
-      postMessage("VIEW_POINT", cable_n0.get_spec());
+      XYPoint cable_start(0, 0);
+      cable_start.set_label("cable_start");
+      cable_start.set_active(false);
+      postMessage("VIEW_POINT", cable_start.get_spec());
     }
   }
 
@@ -1302,7 +1307,9 @@ bool BHV_TowObstacleAvoid::towObstacleAbaftBeam(double deg_abaft) const
 double BHV_TowObstacleAvoid::cableMinDistToPoly(
     double ax, double ay,
     double tx, double ty,
-    const XYPolygon &poly) const
+    const XYPolygon &poly,
+    double *start_node_x,
+    double *start_node_y) const
 {
   // Number of cable nodes (same formula as AOF / pCable)
   int num_nodes;
@@ -1351,6 +1358,10 @@ double BHV_TowObstacleAvoid::cableMinDistToPoly(
 
   // Skip shallow nodes near surface when cable_start_node is set
   int start = std::min(m_cable_start_node, num_nodes - 1);
+
+  // Output the start node position if requested
+  if(start_node_x) *start_node_x = nx[start];
+  if(start_node_y) *start_node_y = ny[start];
 
   // Find minimum distance from cable nodes to the polygon
   double min_dist = 1e9;

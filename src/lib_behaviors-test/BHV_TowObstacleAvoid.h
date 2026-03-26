@@ -55,7 +55,9 @@ protected: // Local Utility functions
   bool towObstacleAbaftBeam(double deg_abaft) const;
   double cableMinDistToPoly(double ax, double ay,
                             double tx, double ty,
-                            const XYPolygon &poly) const;
+                            const XYPolygon &poly,
+                            double *start_node_x = nullptr,
+                            double *start_node_y = nullptr) const;
 
 protected:
   ObShipModelV24 m_obship_model;
