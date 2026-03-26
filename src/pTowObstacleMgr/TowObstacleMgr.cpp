@@ -718,6 +718,14 @@ bool TowObstacleMgr::handleMailNewPoint(string value)
         range_use = std::min(range_nav, range_tow);
     }
 
+    if(m_use_tow && m_cable_nodes_valid) {
+      for(unsigned int i=0; i<m_cable_node_x.size(); i++) {
+        double range_cable = hypot(m_cable_node_x[i] - ptx, m_cable_node_y[i] - pty);
+        if(range_cable < range_use)
+          range_use = range_cable;
+      }
+    }
+
     if(range_use > m_ignore_range) {
       m_points_ignored++;
       return(true);
