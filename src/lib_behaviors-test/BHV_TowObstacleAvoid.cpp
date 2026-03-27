@@ -908,10 +908,14 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
   if(m_build_info != "")
     reflector.create(m_build_info);
   else {
-    reflector.setParam("uniform_piece", "discrete@course:3,speed:3");
-    reflector.setParam("uniform_grid",  "discrete@course:9,speed:9");
+    //reflector.setParam("uniform_piece", "discrete@course:3,speed:3");
+    //reflector.setParam("uniform_grid",  "discrete@course:9,speed:9");
+    reflector.setParam("uniform_piece", "discrete@course:6,speed:3"); //play with values to see degredation
+    reflector.setParam("uniform_grid",  "discrete@course:12,speed:9");
     reflector.create();
   }
+
+  //add speed to reflector.
 
   if(!reflector.stateOK()) {
     postWMessage(reflector.getWarnings());
