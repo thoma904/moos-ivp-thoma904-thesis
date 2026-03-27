@@ -40,8 +40,15 @@ run() {
   echo "--- $label ---" | tee -a "$LOGFILE"
   local output
   output=$($BENCH --reps=$REPS "$@" 2>&1)
+  local rc=$?
   echo "$output" | tee -a "$LOGFILE"
   echo "" | tee -a "$LOGFILE"
+
+  if [ $rc -ne 0 ]; then
+    echo "  *** CRASHED (exit code $rc) ***" | tee -a "$LOGFILE"
+    echo "$sweep,$label,$value,CRASHED,,,exit=$rc" >> "$CSVFILE"
+    return
+  fi
 
   # Parse results from output
   local evals wall eps uspe
@@ -49,6 +56,13 @@ run() {
   wall=$(echo "$output"  | grep "Wall time:"   | awk '{print $(NF-1)}')
   eps=$(echo "$output"   | grep "Evals/sec:"   | awk '{print $NF}')
   uspe=$(echo "$output"  | grep "Time per eval:"| awk '{print $(NF-1)}')
+
+  if [ -z "$eps" ]; then
+    echo "  *** NO RESULTS (possible crash) ***" | tee -a "$LOGFILE"
+    echo "$sweep,$label,$value,NO_RESULT,,,," >> "$CSVFILE"
+    return
+  fi
+
   echo "$sweep,$label,$value,$evals,$wall,$eps,$uspe" >> "$CSVFILE"
 }
 
