@@ -130,7 +130,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_sim_dt         = 0.2;
   m_sim_horizon    = -1;
-  m_turn_rate_max  = 15.0;
+  m_turn_rate_max  = 15.0; //change to 0.
 
   m_cable_sample_step = 1.0;
   m_cable_check_interval = 5;
