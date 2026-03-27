@@ -21,6 +21,7 @@ ADD_SUBDIRECTORY(pTowObstacleMgr)
 ADD_SUBDIRECTORY(pCable)
 ADD_SUBDIRECTORY(uFldTowObstacleSim)
 ADD_SUBDIRECTORY(pTowTurnMgr)
+ADD_SUBDIRECTORY(app_aof_bench)
 
 ##############################################################################
 #                           END of CMakeLists.txt

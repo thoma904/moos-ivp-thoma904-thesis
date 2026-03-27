@@ -631,3 +631,9 @@ double AOF_TowObstacleAvoid::applyTowSpeedPenalty(double util, double tow_spd_me
 
   return (umin + unorm * urng);
 }
+
+//test harness
+//every course/speed pair
+//mbtimer; start/stop elapsed time after
+//go through entire domain 
+// how many aof calcs per second does code support?
