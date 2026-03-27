@@ -237,7 +237,7 @@ if [ "${XLAUNCHED}" != "yes" ]; then
     # echo; echo "$ME: Halting all apps"
     
     POLL_COUNT=0
-    MAX_POLLS=120  # Timeout after ~120 polls (~10 min at warp=10)
+    MAX_POLLS=200  # Timeout after ~120 polls (~10 min at warp=10)
     while true; do
         uQueryDB targ_abe.moos --condition="FINISHED=true" 2>/dev/null
         if [ "$?" = 0 ]; then 

@@ -274,8 +274,8 @@ ProcessConfig = uTimerScript
   reset_max  = nolimit
   condition  = DEPLOY=true
 
-  event      = var=MISSION_TIMEOUT, val=true, time=300
-  event      = var=FINISHED, val=true, time=300
+  event      = var=MISSION_TIMEOUT, val=true, time=500
+  event      = var=FINISHED, val=true, time=500
 }
 
 //----------------------------------------------------
