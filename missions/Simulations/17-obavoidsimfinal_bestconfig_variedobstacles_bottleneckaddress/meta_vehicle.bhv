@@ -125,7 +125,7 @@ Behavior=BHV_TowObstacleAvoid
 	templating = spawn
   updates    = TOW_OBSTACLE_ALERT
 
-       use_refinery = true
+       use_refinery = false
       allowable_ttc = 20
 	min_util_cpa_dist = 2.5
 	max_util_cpa_dist = 5
