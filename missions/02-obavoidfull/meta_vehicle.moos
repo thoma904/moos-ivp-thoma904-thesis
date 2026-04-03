@@ -47,7 +47,7 @@ ProcessConfig = pHelmIvP
 	
   behaviors = targ_$(VNAME).bhv  
   verbose   = false
-  domain    = course:0:359:72
+  domain    = course:0:359:360
   domain    = speed:0:$(MAX_SPD):delta=0.1
 
 	app_logging = true
