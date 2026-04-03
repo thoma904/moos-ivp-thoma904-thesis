@@ -71,12 +71,17 @@ public:
   void setCableSampleStep(double v) { if(v > 0) m_cable_sample_step = v; }
   void setCableCheckInterval(int v) { if(v > 0) m_cable_check_interval = v; }
   void setCableStartNode(int v) { if(v >= 0) m_cable_start_node = v; }
+  void setUseCableDynamics(bool v) { m_use_cable_dynamics = v; }
+  void setSideLock(const std::string &s) { m_side_lock = s; }
 
  private:
   void propagateTowOneStep(double ax, double ay, double dt,
                            double &tx, double &ty,
                            double &tvx, double &tvy) const;
   double applyTowSpeedPenalty(double util, double tow_spd_metric) const;
+  double cableRelaxedMinDist(double ax, double ay, double tx, double ty,
+                             int num_nodes, double rest_length, int start,
+                             const XYPolygon &poly) const;
   void propagateCableOneStep(
     double ax, double ay,   // anchor (node 0, pinned)
     double tx, double ty,   // tow body (last node, pinned)
@@ -107,9 +112,13 @@ public:
   double m_turn_rate_max;
 
   // Cable avoidance params
+  bool   m_use_cable_dynamics;
   double m_cable_sample_step;
   int    m_cable_check_interval;
   int    m_cable_start_node;
+
+  // Side lock
+  std::string m_side_lock;
 
   // Tow speed penalty params
   bool   m_penalize_low_tow_spd;

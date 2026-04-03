@@ -54,6 +54,7 @@ AOF_TowObstacleAvoid::AOF_TowObstacleAvoid(IvPDomain gdomain) :
   m_turn_rate_max  = 0.0;
 
   // Cable avoidance
+  m_use_cable_dynamics = true;
   m_cable_sample_step = 1.0;
   m_cable_check_interval = 5;
   m_cable_start_node = 0;
@@ -148,6 +149,23 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   if(!m_tow_pose_set || !m_dyn_params_set)
     return(getKnownMax());
 
+  // Side lock: if the vehicle has committed to passing on one side,
+  // penalize headings that would place the obstacle on the locked side.
+  // Relative bearing of obstacle centroid w.r.t. candidate heading:
+  //   (0,180) = starboard, (180,360) = port.
+  if(m_side_lock != "") {
+    double cx = m_obship_model.getObcentX();
+    double cy = m_obship_model.getObcentY();
+    double bng_to_ob = relAng(m_tow_x, m_tow_y, cx, cy);
+    double rel_bng = angle360(bng_to_ob - eval_crs);
+    bool ob_to_star = (rel_bng > 0) && (rel_bng < 180);
+    bool ob_to_port = (rel_bng > 180);
+    if((m_side_lock == "star") && ob_to_star)
+      return(getKnownMin());
+    if((m_side_lock == "port") && ob_to_port)
+      return(getKnownMin());
+  }
+
   // Simulation horizon: use configured value or fall back to allowable_ttc.
   // A value of -2 signals "static cable check only, no forward sim."
   bool static_only = (m_sim_horizon < -1.5);
@@ -181,19 +199,12 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     num_nodes = std::max(3, (int)(m_cable_length / 10.0));
   double rest_length = m_cable_length / (double)(num_nodes - 1);
 
-  // Initialize node arrays — straight line from initial anchor to tow body
-  vector<double> n_x(num_nodes), n_y(num_nodes);
-  vector<double> n_vx(num_nodes, 0.0), n_vy(num_nodes, 0.0);
+  // Skip shallow cable nodes near surface when cable_start_node is set
+  int start = std::min(m_cable_start_node, num_nodes - 1);
 
   double hdg_rad0 = (90.0 - osh) * M_PI / 180.0;
   double ax0 = osx - m_attach_offset * cos(hdg_rad0);
   double ay0 = osy - m_attach_offset * sin(hdg_rad0);
-
-  for(int i = 0; i < num_nodes; i++) {
-    double t = (double)i / (double)(num_nodes - 1);
-    n_x[i] = ax0 + t * (tx - ax0);
-    n_y[i] = ay0 + t * (ty - ay0);
-  }
 
   // Track minimum tow-to-obstacle distance over the horizon
   double min_dist = 1e9;
@@ -202,18 +213,31 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
   // simulation step it happened on.  -1 means no contact predicted.
   int contact_step = -1;
 
-  // Skip shallow cable nodes near surface when cable_start_node is set
-  int start = std::min(m_cable_start_node, num_nodes - 1);
+  // Initialize cable node arrays only when using full dynamics
+  vector<double> n_x, n_y, n_vx, n_vy;
+  if(m_use_cable_dynamics) {
+    n_x.resize(num_nodes);  n_y.resize(num_nodes);
+    n_vx.assign(num_nodes, 0.0);  n_vy.assign(num_nodes, 0.0);
+    for(int i = 0; i < num_nodes; i++) {
+      double t = (double)i / (double)(num_nodes - 1);
+      n_x[i] = ax0 + t * (tx - ax0);
+      n_y[i] = ay0 + t * (ty - ay0);
+    }
+  }
 
   // Check initial cable nodes for obstacle proximity
-  for(int i = start; i < num_nodes; i++) {
-    double ds = gut.dist_to_poly(n_x[i], n_y[i]);
-    if(ds < 0) ds = 0;
-    min_dist = std::min(min_dist, ds);
-    if(min_dist <= 0) {
-      contact_step = 0;
-      break;
+  if(m_use_cable_dynamics) {
+    for(int i = start; i < num_nodes; i++) {
+      double ds = gut.dist_to_poly(n_x[i], n_y[i]);
+      if(ds < 0) ds = 0;
+      min_dist = std::min(min_dist, ds);
+      if(min_dist <= 0) { contact_step = 0; break; }
     }
+  } else {
+    double d = cableRelaxedMinDist(ax0, ay0, tx, ty,
+                                   num_nodes, rest_length, start, gut);
+    min_dist = std::min(min_dist, d);
+    if(min_dist <= 0) contact_step = 0;
   }
 
   // Forward simulation of vessel + tow dynamics
@@ -247,8 +271,7 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     double ax = osx - m_attach_offset * cos(hdg_rad);
     double ay = osy - m_attach_offset * sin(hdg_rad);
 
-    // Step 1: Advance the tow body endpoint (matches pTowing physics)
-    // This gives us the new tx/ty to use as the pinned last node
+    // Advance the tow body endpoint (matches pTowing physics)
     propagateTowOneStep(ax, ay, dt, tx, ty, tvx, tvy);
 
     // Track minimum predicted tow speed
@@ -256,25 +279,35 @@ double AOF_TowObstacleAvoid::evalBox(const IvPBox *b) const
     if(tow_spd < min_tow_spd)
       min_tow_spd = tow_spd;
 
-    // Step 2: Advance the full cable shape using the updated endpoint
-    // (mirrors Cable.cpp interior node dynamics)
-    propagateCableOneStep(ax, ay, tx, ty, dt, num_nodes, rest_length,
-                          n_x, n_y, n_vx, n_vy);
+    if(m_use_cable_dynamics) {
+      // Full cable dynamics: propagate interior node positions + velocities
+      propagateCableOneStep(ax, ay, tx, ty, dt, num_nodes, rest_length,
+                            n_x, n_y, n_vx, n_vy);
 
-    // Check all cable nodes against obstacle every N steps
-    // Always check every step if we're close (min_dist is small)
-    if(k % m_cable_check_interval == 0 || min_dist < 5.0) {
-      for(int i = start; i < num_nodes; i++) {
-        double d = gut.dist_to_poly(n_x[i], n_y[i]);
+      if(k % m_cable_check_interval == 0 || min_dist < 5.0) {
+        for(int i = start; i < num_nodes; i++) {
+          double d = gut.dist_to_poly(n_x[i], n_y[i]);
+          if(d < 0) d = 0;
+          min_dist = std::min(min_dist, d);
+          if(min_dist <= 0) break;
+        }
+      } else {
+        double d = gut.dist_to_poly(tx, ty);
         if(d < 0) d = 0;
         min_dist = std::min(min_dist, d);
-        if(min_dist <= 0) break;
       }
-    } else {
-      // Between full checks, always check the tow body endpoint
-      double d = gut.dist_to_poly(tx, ty);
-      if(d < 0) d = 0;
-      min_dist = std::min(min_dist, d);
+    }
+    else {
+      // Relaxed cable: reconstruct shape from endpoints at check intervals
+      if(k % m_cable_check_interval == 0 || min_dist < 5.0) {
+        double d = cableRelaxedMinDist(ax, ay, tx, ty,
+                                       num_nodes, rest_length, start, gut);
+        min_dist = std::min(min_dist, d);
+      } else {
+        double d = gut.dist_to_poly(tx, ty);
+        if(d < 0) d = 0;
+        min_dist = std::min(min_dist, d);
+      }
     }
 
     if(min_dist <= 0)
@@ -580,6 +613,64 @@ void AOF_TowObstacleAvoid::propagateCableOneStep(
       }
     }
   }
+}
+
+//----------------------------------------------------------------
+// Procedure: cableRelaxedMinDist()
+//   Purpose: Compute minimum distance from cable nodes to obstacle
+//            using position-only constraint relaxation (no velocity
+//            arrays). Matches the approach in BHV cableMinDistToPoly.
+
+double AOF_TowObstacleAvoid::cableRelaxedMinDist(
+    double ax, double ay, double tx, double ty,
+    int num_nodes, double rest_length, int start,
+    const XYPolygon &poly) const
+{
+  // Initialize nodes as straight line from anchor to tow
+  vector<double> nx(num_nodes), ny(num_nodes);
+  for(int i = 0; i < num_nodes; i++) {
+    double frac = (double)i / (double)(num_nodes - 1);
+    nx[i] = ax + frac * (tx - ax);
+    ny[i] = ay + frac * (ty - ay);
+  }
+
+  // Constraint relaxation passes (no velocities)
+  int relax_iters = 4;
+  for(int r = 0; r < relax_iters; r++) {
+    // Forward pass: pull interior nodes toward previous neighbor
+    for(int i = 1; i < num_nodes - 1; i++) {
+      double dx = nx[i-1] - nx[i];
+      double dy = ny[i-1] - ny[i];
+      double dist = hypot(dx, dy);
+      if(dist > rest_length && dist > 1e-9) {
+        double sc = rest_length / dist;
+        nx[i] = nx[i-1] - dx * sc;
+        ny[i] = ny[i-1] - dy * sc;
+      }
+    }
+    // Backward pass: pull interior nodes toward next neighbor
+    for(int i = num_nodes - 2; i >= 1; i--) {
+      double dx = nx[i+1] - nx[i];
+      double dy = ny[i+1] - ny[i];
+      double dist = hypot(dx, dy);
+      if(dist > rest_length && dist > 1e-9) {
+        double sc = rest_length / dist;
+        nx[i] = nx[i+1] - dx * sc;
+        ny[i] = ny[i+1] - dy * sc;
+      }
+    }
+  }
+
+  // Find minimum distance from cable nodes to polygon
+  double min_dist = 1e9;
+  for(int i = start; i < num_nodes; i++) {
+    double d = poly.dist_to_poly(nx[i], ny[i]);
+    if(d < 0) d = 0;
+    if(d < min_dist) min_dist = d;
+    if(min_dist <= 0) return 0;
+  }
+
+  return min_dist;
 }
 
 //----------------------------------------------------------------
