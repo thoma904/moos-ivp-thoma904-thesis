@@ -85,6 +85,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_holonomic_ok = false;
   m_allstop_on_breach = true;
+  m_use_side_lock = true;
 
   // Tow-specific vars
   m_tow_pad           = 0.0;
@@ -274,6 +275,8 @@ bool BHV_TowObstacleAvoid::setParam(string param, string val)
 
   else if(param == "allstop_on_breach")
     return(setBooleanOnString(m_allstop_on_breach, val));
+  else if(param == "use_side_lock")
+    return(setBooleanOnString(m_use_side_lock, val));
 
   else
     return(false);
@@ -969,7 +972,7 @@ double BHV_TowObstacleAvoid::getRelevance()
     }
   }
 
-  if(range_relevance > 0.6)
+  if(m_use_side_lock && range_relevance > 0.6)
   {
     if(m_side_lock == "")
     {

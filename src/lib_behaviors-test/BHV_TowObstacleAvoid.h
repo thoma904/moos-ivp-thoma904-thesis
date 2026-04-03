@@ -78,6 +78,7 @@ protected: // Configuration parameters
 
   bool m_holonomic_ok;
   bool m_allstop_on_breach;
+  bool m_use_side_lock;
 
   //Tow Specific Additions
   double m_tow_pad;
