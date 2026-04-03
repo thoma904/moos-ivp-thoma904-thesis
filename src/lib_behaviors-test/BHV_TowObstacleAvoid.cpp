@@ -130,7 +130,7 @@ BHV_TowObstacleAvoid::BHV_TowObstacleAvoid(IvPDomain gdomain) :
 
   m_sim_dt         = 0.2;
   m_sim_horizon    = -1;
-  m_turn_rate_max  = 15.0; //change to 0.
+  m_turn_rate_max  = 0.0; //change to 0.
 
   m_cable_sample_step = 1.0;
   m_cable_check_interval = 5;
@@ -841,21 +841,24 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     aof_avoid.setCableSampleStep(m_cable_sample_step);
     aof_avoid.setCableCheckInterval(m_cable_check_interval);
     aof_avoid.setCableStartNode(m_cable_start_node);
+    //aof_avoid.setUseCableDynamics(m_use_refinery);
+    aof_avoid.setUseCableDynamics(true);
 
-    if(m_tow_deployed) {
-      aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
-      aof_avoid.setTowSpeedPenalty(true);
-    }
-    else {
-      // Signal static cable check only (no forward sim) with sentinel -2
-      aof_avoid.setSimParams(m_sim_dt, -2, m_turn_rate_max);
-      aof_avoid.setTowSpeedPenalty(false);
-    }
+    // Forward sim runs in both deployed and not-deployed cases so
+    // that different candidate headings produce different cable
+    // geometries relative to the obstacle (avoids a flat IvP function).
+    // The tow body responds to cable physics naturally — when not
+    // deployed it starts near-stationary and gets pulled by the cable
+    // as the vessel moves, which is physically reasonable.
+    aof_avoid.setSimParams(m_sim_dt, m_sim_horizon, m_turn_rate_max);
+    aof_avoid.setTowSpeedPenalty(m_tow_deployed);
   }
   else {
     aof_avoid.setTowEval(false);
     aof_avoid.setTowOnly(false);
   }
+
+  aof_avoid.setSideLock(m_side_lock);
 
   bool ok_init = aof_avoid.initialize();
   if(!ok_init) {
@@ -908,10 +911,10 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
   if(m_build_info != "")
     reflector.create(m_build_info);
   else {
-    //reflector.setParam("uniform_piece", "discrete@course:3,speed:3");
-    //reflector.setParam("uniform_grid",  "discrete@course:9,speed:9");
-    reflector.setParam("uniform_piece", "discrete@course:6,speed:3"); //play with values to see degredation
-    reflector.setParam("uniform_grid",  "discrete@course:12,speed:9");
+    reflector.setParam("uniform_piece", "discrete@course:3,speed:3");
+    reflector.setParam("uniform_grid",  "discrete@course:9,speed:9");
+    //reflector.setParam("uniform_piece", "discrete@course:6,speed:3"); //play with values to see degredation
+    //reflector.setParam("uniform_grid",  "discrete@course:12,speed:9");
     reflector.create();
   }
 
