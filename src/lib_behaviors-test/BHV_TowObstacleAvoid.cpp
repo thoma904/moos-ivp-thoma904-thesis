@@ -844,8 +844,8 @@ IvPFunction *BHV_TowObstacleAvoid::buildOF()
     aof_avoid.setCableSampleStep(m_cable_sample_step);
     aof_avoid.setCableCheckInterval(m_cable_check_interval);
     aof_avoid.setCableStartNode(m_cable_start_node);
-    //aof_avoid.setUseCableDynamics(m_use_refinery);
-    aof_avoid.setUseCableDynamics(true);
+    aof_avoid.setUseCableDynamics(m_use_refinery);
+    //aof_avoid.setUseCableDynamics(true);
 
     // Forward sim runs in both deployed and not-deployed cases so
     // that different candidate headings produce different cable
