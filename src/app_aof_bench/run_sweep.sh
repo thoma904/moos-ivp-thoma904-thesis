@@ -120,6 +120,54 @@ for crs in 72 180 360 720; do
   done
 done
 
+# ---------------------------------------------------------
+# Sweep 7: Turn rate limit
+# ---------------------------------------------------------
+tee_header "===== SWEEP: turn_rate ====="
+for tr in 0 5 10 15 20 30; do
+  run "turn_rate" "turn_rate=${tr}" "$tr" --turn_rate=$tr
+done
+
+# ---------------------------------------------------------
+# Sweep 8: Cable dynamics mode (full vs relaxed)
+# ---------------------------------------------------------
+tee_header "===== SWEEP: cable_dynamics ====="
+run "cable_dyn" "cable_dyn=full" "true" --cable_dyn=true
+run "cable_dyn" "cable_dyn=relaxed" "false" --cable_dyn=false
+
+# ---------------------------------------------------------
+# Sweep 9: Side lock effect
+# ---------------------------------------------------------
+tee_header "===== SWEEP: side_lock ====="
+run "side_lock" "side_lock=off" "off"
+run "side_lock" "side_lock=port" "port" --side_lock=port
+run "side_lock" "side_lock=star" "star" --side_lock=star
+
+# ---------------------------------------------------------
+# Sweep 10: Combined configs matching simulation batches
+#   Compare the actual configs used in the thesis results
+# ---------------------------------------------------------
+tee_header "===== SWEEP: combined configs (matching sim batches) ====="
+# Original baseline: TRL=15, full cable, 72 course pts
+run "config" "baseline" "baseline" \
+    --turn_rate=15 --sim_horizon=25 --sim_dt=0.2 --crs_pts=72 --spd_pts=21 \
+    --cable_dyn=true
+
+# Best collision: TRL=0, relaxed cable, sidelock, 72 course pts
+run "config" "best_collision" "best_collision" \
+    --turn_rate=0 --sim_horizon=25 --sim_dt=0.2 --crs_pts=72 --spd_pts=21 \
+    --cable_dyn=false --side_lock=port
+
+# Lowest timeout: TRL=0, relaxed cable, no sidelock, 72 course pts
+run "config" "lowest_timeout" "lowest_timeout" \
+    --turn_rate=0 --sim_horizon=25 --sim_dt=0.2 --crs_pts=72 --spd_pts=21 \
+    --cable_dyn=false
+
+# Reflector family: TRL=0, full cable, 360 course pts
+run "config" "reflector_360" "reflector_360" \
+    --turn_rate=0 --sim_horizon=25 --sim_dt=0.2 --crs_pts=360 --spd_pts=21 \
+    --cable_dyn=true
+
 tee_header "===== SWEEP COMPLETE ====="
 echo ""
 echo "Results saved:"
