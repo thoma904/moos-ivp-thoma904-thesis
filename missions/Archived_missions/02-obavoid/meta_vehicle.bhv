@@ -137,30 +137,3 @@ Behavior=BHV_AvoidObstacleV24
 	visual_hints = gut_poly_vertex_color = off
 	visual_hints = gut_poly_edge_color = yellow
 }
-
-Behavior = BHV_Towing
-{
-  name          = towing
-  pwt           = 100             
-  condition     = Deploy = true
-
-  // optional tweaks (defaults shown)
-  obstacle_var  = OBM_TOW_GUTS
-  peak_width    = 30
-  base_width    = 180
-  summit_delta  = 30
-}
-
-//Behavior = BHV_MemoryTurnLimit
-//{
-  // General Behavior Parameters
-  // ---------------------------
-  //name = mem_turn_limit // default
-  //pwt = 100 // default
-  //condition = MODE==TRANSITING
-  //updates = MEM_TURN_UPDATES // example
-  // Parameters specific to this behavior
-  // ------------------------------------
-  //memory_time = 60 // example (seconds)
-  //turn_range = 30 // example (degrees)
-//}
