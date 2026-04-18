@@ -38,6 +38,8 @@ int main(int argc, char *argv[])
   int          cable_check  = 5;    // cable check interval (steps)
   int          cable_start  = 0;    // cable start node
   double       turn_rate    = 15.0; // turn rate max (deg/s)
+  bool         cable_dyn    = true; // full cable dynamics vs relaxed
+  string       side_lock    = "";   // "" = off, "port" or "star"
 
   // Simple arg parsing: --key=value
   for(int i = 1; i < argc; i++) {
@@ -62,6 +64,10 @@ int main(int argc, char *argv[])
       cable_start = atoi(arg.substr(14).c_str());
     else if(arg.find("--turn_rate=") == 0)
       turn_rate = atof(arg.substr(12).c_str());
+    else if(arg.find("--cable_dyn=") == 0)
+      cable_dyn = (string(arg.substr(12)) != "false" && string(arg.substr(12)) != "0");
+    else if(arg.find("--side_lock=") == 0)
+      side_lock = arg.substr(12);
     else {
       cout << "Usage: aof_bench [options]" << endl;
       cout << "  --crs_pts=N       course domain points  (default 360)" << endl;
@@ -74,6 +80,8 @@ int main(int argc, char *argv[])
       cout << "  --cable_check=N   cable check interval   (default 5)"  << endl;
       cout << "  --cable_start=N   cable start node       (default 0)"  << endl;
       cout << "  --turn_rate=D     turn rate max deg/s    (default 15)" << endl;
+      cout << "  --cable_dyn=B     full cable dynamics    (default true)" << endl;
+      cout << "  --side_lock=S     side lock (port/star)  (default off)" << endl;
       return 0;
     }
   }
@@ -98,6 +106,8 @@ int main(int argc, char *argv[])
        << ", start_node=" << cable_start
        << ", nodes=" << (cable_len < 30 ? 3 : max(3, (int)(cable_len / 10.0))) << endl;
   cout << "Turn rate max: " << turn_rate << " deg/s" << endl;
+  cout << "Cable dynamics: " << (cable_dyn ? "full" : "relaxed") << endl;
+  cout << "Side lock: " << (side_lock.empty() ? "off" : side_lock) << endl;
   cout << "Reps: " << reps << endl;
 
   // -----------------------------------------------------------
@@ -131,6 +141,9 @@ int main(int argc, char *argv[])
   aof.setSimParams(sim_dt, sim_hz, turn_rate);
   aof.setCableCheckInterval(cable_check);
   aof.setCableStartNode(cable_start);
+  aof.setUseCableDynamics(cable_dyn);
+  if(!side_lock.empty())
+    aof.setSideLock(side_lock);
 
   bool ok = aof.initialize();
   if(!ok) {
