@@ -134,6 +134,7 @@ Behavior=BHV_TowObstacleAvoid
      completed_dist = 25
      sim_horizon = 25
      allstop_on_breach = false
+     use_side_lock = true
 
 	rng_flag = <50 RANGE = $[RNG]
 	rng_flag = <40 MIDRANGE = $[RNG]
