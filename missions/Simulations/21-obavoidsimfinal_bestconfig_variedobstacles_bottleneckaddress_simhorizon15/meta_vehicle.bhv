@@ -132,7 +132,7 @@ Behavior=BHV_TowObstacleAvoid
      pwt_outer_dist = 20
      pwt_inner_dist = 10
      completed_dist = 25
-     sim_horizon = 25
+     sim_horizon = 15
      allstop_on_breach = false
      use_side_lock = true
 

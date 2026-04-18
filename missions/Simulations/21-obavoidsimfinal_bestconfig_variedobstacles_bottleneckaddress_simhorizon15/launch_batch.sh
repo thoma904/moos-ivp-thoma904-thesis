@@ -46,7 +46,7 @@ for ((j=1; j<=NUM_RUNS; j++)); do
                 ./clean.sh
             fi
 
-            ./launch_sleep.sh --obs="$opt" --sep="$sep" --nogui
+            ./launch_sleep.sh --obs="$opt" --sep="$sep" --nogui 5
             EXIT_CODE=$?
 
             if [ $EXIT_CODE -eq 0 ] && ls LOG_*/ 1>/dev/null 2>&1; then
