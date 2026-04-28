@@ -1,51 +1,77 @@
 # moos-ivp-thoma904-thesis
 
-|              |                        |
-|:------------ |:---------------------- |
-| FILE:        | moos-ivp-thoma904-thesis/README |
-| DATE:        | 2025/08/11             |
-| DESCRIPTION: | Contains beta apps for integrating towed bodies into the MOOS-IVP framework. |
-
+|              |                                                                                                                                                                                                         |
+| :----------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| FILE:        | moos-ivp-thoma904-thesis/README                                                                                                                                                                         |
+| DATE:        | 2026/04/28                                                                                                                                                                                              |
+| DESCRIPTION: | MOOS-IvP applications and IvP behaviors that extend the autonomy system to account for towed-body dynamics, including obstacle avoidance and turn management for a vehicle towing a cable-coupled body. |
 
 # Introduction
 
-This repository contains codes for extending the MOOS-IVP Autonomy system to factor in towed body behavior. This includes a MOOS application only as of 11AUG25. Constructed to build and launch.
+This repository extends the MOOS-IvP autonomy system to account for a towed body whe avoiding obstacles. It provides a set of MOOS applications that simulate the towed body
+and cable, IvP behaviors that bias the helm's decisions to keep the towed body
+safe, and a progression of missions used to develop and validate the approach.
 
+# Directory Structure
+
+| Path      | Description                            |
+| :-------- | :------------------------------------- |
+| lib/      | Generated shared libraries (behaviors) |
+| missions/ | MOOS missions and simulation scenarios |
+| scripts/  | Helper scripts                         |
+| src/      | Source for applications and behaviors  |
 
 # Applications
 
-The relevant applications for this repo are described below:
-
-| src/             | Description                                 |
-|:---------------- |:------------------------------------------- |
-| pTowing          | Basic "breadcrumb" model                    |
-| pTowing1         | Mass-Spring-Damper model (Recommended)      |
-| pTowing2         | Expanded model based on Newman EoM (no work)|
-
-# Missions
-
-| missions/        | Description                                 |
-|:---------------- |:------------------------------------------- |
-| Towing_1         | Basic alder mission (waypoint and back)     |
-| Towing_2         | Leg run mission with complex turns          |
+| src/               | Description                                                       |
+| :----------------- | :---------------------------------------------------------------- |
+| pTowing            | Mass-spring-damper towed-body simulator (current model)           |
+| pCable             | Cable model coupling tow vehicle and towed body                   |
+| pTowObstacleMgr    | Obstacle manager extended to account for towed body and cable     |
+| pTowTurnMgr        | Manages turn execution while towing (e.g. Williamson-style turns) |
+| uFldTowObstacleSim | Shoreside/field-level obstacle simulator for towed-body missions  |
+| app_aof_bench      | AOF benchmarking utility                                          |
+| Archive/           | Earlier prototypes (breadcrumb, Newman EoM attempt, area, circle) |
 
 # Behaviors
 
-None as of yet.
+Built into `lib/` from [src/lib_behaviors-test/](src/lib_behaviors-test/):
+
+| Behavior             | Description                                                  |
+| :------------------- | :----------------------------------------------------------- |
+| BHV_Towing           | Core towed-body coupling behavior                            |
+| BHV_TowedTurn        | Turn-management behavior aware of towed body                 |
+| BHV_TowObstacleAvoid | Obstacle avoidance that protects both vehicle and towed body |
+| BHV_TowSafety        | Safety constraints on tow geometry                           |
+| BHV_Williamson       | Williamson turn behavior                                     |
+| BHV_SimpleWaypoint   | Minimal waypoint behavior used for testbed missions          |
+
+# Missions
+
+| missions/         | Description                                              |
+| :---------------- | :------------------------------------------------------- |
+| 01-Minehunting    | Minehunting mission with towed sensor                    |
+| 02-obavoidfull    | Full obstacle-avoidance mission with towed body          |
+| Simulations/04-23 | Iterative simulation series used to tune and validate    |
+|                   | obstacle avoidance, cable modeling, and turn management. |
+|                   | Numbering reflects development order; later folders      |
+|                   | (e.g. 14-bestconfig, 21–22-warp/horizon variants,       |
+|                   | 23-increasedreflector_1mpad) hold the validated configs. |
+| Archived_missions | Earlier mission iterations kept for reference            |
+
+See [missions/Simulations/](missions/Simulations/) for the full list.
 
 # Build Instructions
 
-## Linux and Mac Users
+## Linux and Mac
 
-To build on Linux and Apple platforms, execute the build script within this
-directory:
+To build using the supplied script:
 
 ```bash
    $ ./build.sh
 ```
 
-To build without using the supplied script, execute the following commands
-within this directory:
+To build manually:
 
 ```bash
    $ mkdir -p build
@@ -55,14 +81,29 @@ within this directory:
    $ cd ..
 ```
 
-# Launch Instructions
-
-After building navigate to missions/Towing_2 and run the supplied launch script:
+To clean:
 
 ```bash
-   $ cd missions/Towing_2
+   $ ./clean.sh
+```
+
+# Environment Variables
+
+For the helm to find the IvP behaviors built into `lib/`, add this repo's
+`lib/` directory to `IVP_BEHAVIOR_DIRS`, and add `bin/` to your `PATH` so
+pAntler can launch the applications.
+
+# Launch Instructions
+
+After building, navigate to a mission directory and run its launch script.
+For example, to run the full obstacle-avoidance mission:
+
+```bash
+   $ cd missions/02-obavoidfull
    $ ./launch.sh {time warp if desired}
 ```
 
-# END of README
+Most simulation folders also include `launch_batch.sh` for repeated runs and
+`clean.sh` to clear logs between launches.
 
+# END of README
